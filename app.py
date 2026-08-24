@@ -202,12 +202,8 @@ def add_map_color(gdf, value_col="평균"):
 
 # 8. 시각화 실행
 if submit_button:
-
-    dep_min, dep_max, base_deposit = (
-        deposit_options[selected_deposit_label])
-
-    area_min, area_max = (
-        area_options[selected_area_label])
+    dep_min, dep_max, base_deposit = deposit_options[selected_deposit_label]
+    area_min, area_max = area_options[selected_area_label]
 
     # 선택한 연도의 데이터만 로드
     df_raw = load_rent(selected_year)
@@ -221,72 +217,78 @@ if submit_button:
         area_min,
         area_max,
         selected_age,
-        selected_floor)
+        selected_floor
+    )
 
     if df.empty:
-        st.warning(
-            "선택한 조건에 해당하는 거래가 없습니다.")
+        st.warning("선택한 조건에 해당하는 거래가 없습니다.")
         st.stop()
 
-     st.subheader(
+    # 9. 요약 통계
+    st.subheader(
         f"📊 {selected_year}년 "
         f"{house_type_selection} "
-        f"{spatial_unit} 환산월세")
+        f"{spatial_unit} 환산월세"
+    )
 
     col1, col2, col3 = st.columns(3)
 
     col1.metric(
         "거래건수",
-        f"{len(df):,}건")
+        f"{len(df):,}건"
+    )
 
     col2.metric(
         "평균 환산월세",
-        f"{df['환산월세(만원)'].mean():.1f}만원")
+        f"{df['환산월세(만원)'].mean():.1f}만원"
+    )
 
     col3.metric(
         "중앙 환산월세",
-        f"{df['환산월세(만원)'].median():.1f}만원")
+        f"{df['환산월세(만원)'].median():.1f}만원"
+    )
 
     st.caption(
-        f"보증금 {base_deposit:,}만원을 기준으로 환산한 월세입니다.")
+        f"보증금 {base_deposit:,}만원을 기준으로 환산한 월세입니다."
+    )
 
-if spatial_unit == "법정동별":
-
+    # 10. 법정동별 시각화
+    if spatial_unit == "법정동별":
         dong = load_dong()
 
-        # 코드 자료형 통일
         df["자치구코드"] = df["자치구코드"].astype("Int64")
         df["법정동코드"] = df["법정동코드"].astype("Int64")
 
         dong["자치구코드"] = dong["자치구코드"].astype("Int64")
         dong["법정동코드"] = dong["법정동코드"].astype("Int64")
 
-        # 법정동별 통계
         dong_stats = aggregate_rent(
             df,
-            ["자치구코드", "법정동코드"])
+            ["자치구코드", "법정동코드"]
+        )
 
-        # 법정동 경계 + 통계
         dong_map = dong.merge(
             dong_stats,
             on=["자치구코드", "법정동코드"],
-            how="inner")
+            how="inner"
+        )
 
-        # 거래건수가 너무 적은 지역 제외
+        # 거래 5건 이상만 지도 표시
         dong_map = dong_map[
             dong_map["거래건수"] >= 5
         ].copy()
 
         if dong_map.empty:
-            st.warning(
-                "거래 5건 이상인 법정동이 없습니다.")
+            st.warning("거래 5건 이상인 법정동이 없습니다.")
             st.stop()
 
-        # 색상 생성
+        # 5~95분위 기준 색상
         dong_map, vmin, vmax = add_map_color(
             dong_map,
-            "평균")
-   dong_layer = pdk.Layer(
+            "평균"
+        )
+
+        dong_layer = pdk.Layer(
             "GeoJsonLayer",
             data=dong_map,
             filled=True,
@@ -295,13 +297,15 @@ if spatial_unit == "법정동별":
             get_line_color=[90, 90, 90, 100],
             line_width_min_pixels=0.5,
             pickable=True,
-            auto_highlight=True)
+            auto_highlight=True
+        )
 
         view_state = pdk.ViewState(
             latitude=37.5665,
             longitude=126.9780,
             zoom=10.3,
-            pitch=0)
+            pitch=0
+        )
 
         tooltip = {
             "html": """
@@ -311,25 +315,29 @@ if spatial_unit == "법정동별":
                 중앙 환산월세: {중앙}만원<br/>
                 최저 환산월세: {최저}만원<br/>
                 최고 환산월세: {최고}만원
-            """}
+            """
+        }
 
         deck = pdk.Deck(
             layers=[dong_layer],
             initial_view_state=view_state,
             tooltip=tooltip,
             map_provider="carto",
-            map_style="light")
+            map_style="light"
+        )
 
         st.pydeck_chart(
             deck,
-            use_container_width=True)
+            use_container_width=True
+        )
 
-    st.caption(
+        st.caption(
             f"지도 색상은 평균 환산월세의 "
             f"5~95분위({vmin:.1f}~{vmax:.1f}만원)를 기준으로 표시하며, "
-            f"거래 5건 미만 지역은 제외했습니다.")
+            f"거래 5건 미만 지역은 제외했습니다."
+        )
 
- display_df = (
+        display_df = (
             dong_map[
                 [
                     "EMD_NM",
@@ -337,22 +345,39 @@ if spatial_unit == "법정동별":
                     "평균",
                     "중앙",
                     "최저",
-                    "최고"]]
+                    "최고"
+                ]
+            ]
             .sort_values(
                 "평균",
-                ascending=False)
+                ascending=False
+            )
             .rename(
                 columns={
                     "EMD_NM": "법정동",
                     "평균": "평균 환산월세",
                     "중앙": "중앙 환산월세",
                     "최저": "최저 환산월세",
-                    "최고": "최고 환산월세"}))
+                    "최고": "최고 환산월세"
+                }
+            )
+        )
 
-        with st.expander(
-            "📋 법정동별 상세 통계 보기"
-        ):
+        with st.expander("📋 법정동별 상세 통계 보기"):
             st.dataframe(
                 display_df,
                 use_container_width=True,
-                hide_index=True)
+                hide_index=True
+            )
+
+    elif spatial_unit == "격자별":
+        st.info("격자별 지도는 다음 단계에서 연결합니다.")
+
+    elif spatial_unit == "지하철역별":
+        st.info("지하철역별 지도는 다음 단계에서 연결합니다.")
+
+else:
+    st.info(
+        "왼쪽 사이드바에서 조건을 선택한 후 "
+        "'시각화 실행' 버튼을 눌러주세요."
+    )
