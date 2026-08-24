@@ -3,6 +3,7 @@ import pandas as pd
 import geopandas as gpd
 import pydeck as pdk
 import numpy as np
+import altair as alt
 
 from pathlib import Path
 from matplotlib import colormaps
@@ -66,7 +67,7 @@ def load_rent_station():
         DATA_DIR / "rent_station.parquet"
     )
 
-# 4. 지하철 노선 목록
+# 4. 기준값 설정
 subway_reference = load_subway()
 
 all_subway_lines = sorted({
@@ -74,6 +75,41 @@ all_subway_lines = sorted({
     for text in subway_reference["hoseon"].dropna()
     for line in str(text).split(",")
 })
+
+# 보증금 대표값
+DEPOSIT_BASE_VALUES = [
+    0,
+    500,
+    1000,
+    2000,
+    3000,
+    4000,
+    5000,
+    6000,
+    7000,
+    8000,
+    9000,
+    10000
+]
+
+def deposit_label(value):
+    if value == 0:
+        return "무보증"
+    return f"{value:,}만원"
+
+DEPOSIT_OPTIONS = {
+    deposit_label(value): value
+    for value in DEPOSIT_BASE_VALUES
+}
+
+def get_deposit_range(base_deposit):
+    if base_deposit == 0:
+        return 0, 1
+
+    if base_deposit == 500:
+        return 1, 1000
+
+    return base_deposit, base_deposit + 1000
 
 # 5. 검색 조건
 with st.sidebar.form("search_form"):
@@ -104,28 +140,26 @@ with st.sidebar.form("search_form"):
         [2025, 2024, 2023]
     )
 
-    deposit_options = {
-        "1000만원 미만": (0, 1000, 500),
-        "1000~3000만원 미만": (1000, 3000, 1000),
-        "3000~5000만원 미만": (3000, 5000, 3000),
-        "5000만원~1억원": (5000, 10000, 5000)
-    }
-
     selected_deposit_label = st.selectbox(
-        "보증금 구간",
-        list(deposit_options.keys())
+        "기준 보증금",
+        list(DEPOSIT_OPTIONS.keys()),
+        index=2,
+        help=(
+            "선택한 보증금 구간의 거래를 대표 보증금으로 "
+            "환산하여 비교합니다."
+        )
     )
 
-    area_options = {
-        "15㎡ 미만": (0, 15),
-        "15~25㎡": (15, 25),
-        "25~35㎡": (25, 35),
-        "35㎡ 이상": (35, 9999)
-    }
+    area_min, area_max = st.slider(
+        "전용면적 (㎡)",
+        min_value=5,
+        max_value=85,
+        value=(15, 30),
+        step=1
+    )
 
-    selected_area_label = st.selectbox(
-        "면적대",
-        list(area_options.keys())
+    st.caption(
+        f"선택 면적: {area_min}㎡ ~ {area_max}㎡"
     )
 
     selected_age = st.selectbox(
@@ -146,47 +180,27 @@ with st.sidebar.form("search_form"):
     )
 
     submit_button = st.form_submit_button(
-        "시각화 실행",
+        "우리집 찾기",
         type="primary",
         use_container_width=True
     )
 
-# 6. 전월세 데이터 필터링
-def filter_rent_data(
+# 6. 공통 조건 필터
+def filter_common_data(
     df,
     house_type,
-    dep_min,
-    dep_max,
-    base_deposit,
-    area_min,
-    area_max,
     building_age,
     floor
 ):
-    # 월세만 사용
     df = df[
         df["전월세구분"] == "월세"
     ].copy()
 
-    # 주택 유형
     if house_type != "전체":
         df = df[
             df["건물용도"] == house_type
         ]
 
-    # 보증금
-    df = df[
-        (df["보증금(만원)"] >= dep_min) &
-        (df["보증금(만원)"] < dep_max)
-    ]
-
-    # 면적
-    df = df[
-        (df["임대면적"] >= area_min) &
-        (df["임대면적"] < area_max)
-    ]
-
-    # 건축년도
     if building_age == "신축 (2021년 이후)":
         df = df[
             df["건축년도"] >= 2021
@@ -197,13 +211,29 @@ def filter_rent_data(
             df["건축년도"] > 2000
         ]
 
-    # 층수
     if floor == "저층 (1층 이하)":
         df = df[
             df["층"] <= 1
         ]
 
-    # 보증금 기준 환산월세
+    return df
+
+# 7. 지도용 거래 필터
+def filter_rent_data(
+    df,
+    dep_min,
+    dep_max,
+    base_deposit,
+    area_min,
+    area_max
+):
+    df = df[
+        (df["보증금(만원)"] >= dep_min) &
+        (df["보증금(만원)"] < dep_max) &
+        (df["임대면적"] >= area_min) &
+        (df["임대면적"] <= area_max)
+    ].copy()
+
     df["환산월세(만원)"] = (
         df["임대료(만원)"]
         + (df["보증금(만원)"] - base_deposit) * 0.005
@@ -211,7 +241,7 @@ def filter_rent_data(
 
     return df
 
-# 7. 공간 단위별 통계
+# 8. 공간 단위별 통계
 def aggregate_rent(df, group_cols):
     stats = (
         df.groupby(group_cols)["환산월세(만원)"]
@@ -230,7 +260,7 @@ def aggregate_rent(df, group_cols):
 
     return stats
 
-# 8. 지도 색상
+# 9. 지도 색상
 def add_map_color(data, value_col="평균"):
     valid_values = data[value_col].dropna()
 
@@ -268,7 +298,128 @@ def add_map_color(data, value_col="평균"):
 
     return data, vmin, vmax
 
-# 9. 서울 기본 지도 위치
+# 10. 보증금별 월세 통계
+def make_deposit_stats(
+    df,
+    area_min,
+    area_max
+):
+    chart_df = df[
+        (df["임대면적"] >= area_min) &
+        (df["임대면적"] <= area_max)
+    ].copy()
+
+    chart_df["보증금기준"] = pd.NA
+
+    chart_df.loc[
+        chart_df["보증금(만원)"] == 0,
+        "보증금기준"
+    ] = "무보증"
+
+    chart_df.loc[
+        (chart_df["보증금(만원)"] >= 1) &
+        (chart_df["보증금(만원)"] < 1000),
+        "보증금기준"
+    ] = "500만원"
+
+    for base in range(1000, 11000, 1000):
+        chart_df.loc[
+            (chart_df["보증금(만원)"] >= base) &
+            (chart_df["보증금(만원)"] < base + 1000),
+            "보증금기준"
+        ] = f"{base:,}만원"
+
+    order = list(DEPOSIT_OPTIONS.keys())
+
+    chart_df["보증금기준"] = pd.Categorical(
+        chart_df["보증금기준"],
+        categories=order,
+        ordered=True
+    )
+
+    stats = (
+        chart_df.dropna(subset=["보증금기준"])
+        .groupby(
+            "보증금기준",
+            observed=True
+        )
+        .agg(
+            거래건수=("임대료(만원)", "count"),
+            평균월세=("임대료(만원)", "mean"),
+            중앙월세=("임대료(만원)", "median")
+        )
+        .reset_index()
+    )
+
+    stats["평균월세"] = (
+        stats["평균월세"].round(1)
+    )
+    stats["중앙월세"] = (
+        stats["중앙월세"].round(1)
+    )
+
+    return stats
+
+# 11. 면적별 월세 통계
+def make_area_stats(
+    df,
+    dep_min,
+    dep_max,
+    base_deposit
+):
+    chart_df = df[
+        (df["보증금(만원)"] >= dep_min) &
+        (df["보증금(만원)"] < dep_max) &
+        (df["임대면적"] >= 5) &
+        (df["임대면적"] <= 85)
+    ].copy()
+
+    chart_df["환산월세(만원)"] = (
+        chart_df["임대료(만원)"]
+        + (
+            chart_df["보증금(만원)"]
+            - base_deposit
+        ) * 0.005
+    )
+
+    bins = list(range(5, 95, 5))
+
+    labels = [
+        f"{start}~{start + 5}"
+        for start in bins[:-1]
+    ]
+
+    chart_df["면적대"] = pd.cut(
+        chart_df["임대면적"],
+        bins=bins,
+        labels=labels,
+        right=False
+    )
+
+    stats = (
+        chart_df.dropna(subset=["면적대"])
+        .groupby(
+            "면적대",
+            observed=True
+        )
+        .agg(
+            거래건수=("환산월세(만원)", "count"),
+            평균월세=("환산월세(만원)", "mean"),
+            중앙월세=("환산월세(만원)", "median")
+        )
+        .reset_index()
+    )
+
+    stats["평균월세"] = (
+        stats["평균월세"].round(1)
+    )
+    stats["중앙월세"] = (
+        stats["중앙월세"].round(1)
+    )
+
+    return stats
+
+# 12. 서울 기본 지도
 SEOUL_VIEW = pdk.ViewState(
     latitude=37.5665,
     longitude=126.9780,
@@ -276,32 +427,37 @@ SEOUL_VIEW = pdk.ViewState(
     pitch=0
 )
 
-# 10. 시각화 실행
+# 13. 실행
 if submit_button:
-    dep_min, dep_max, base_deposit = (
-        deposit_options[selected_deposit_label]
+    base_deposit = (
+        DEPOSIT_OPTIONS[selected_deposit_label]
     )
 
-    area_min, area_max = (
-        area_options[selected_area_label]
+    dep_min, dep_max = get_deposit_range(
+        base_deposit
     )
 
-    # 선택 연도만 로드
     with st.spinner(
         f"{selected_year}년 거래 데이터를 불러오는 중..."
     ):
         df_raw = load_rent(selected_year)
 
-    df = filter_rent_data(
+    # 주택유형·연식·층 조건
+    common_df = filter_common_data(
         df_raw,
         house_type_selection,
+        selected_age,
+        selected_floor
+    )
+
+    # 보증금·면적 조건
+    df = filter_rent_data(
+        common_df,
         dep_min,
         dep_max,
         base_deposit,
         area_min,
-        area_max,
-        selected_age,
-        selected_floor
+        area_max
     )
 
     if df.empty:
@@ -310,11 +466,16 @@ if submit_button:
         )
         st.stop()
 
-    # 11. 요약 통계
+    # 14. 선택 조건 요약
     st.subheader(
         f"📊 {selected_year}년 "
         f"{house_type_selection} "
-        f"{spatial_unit} 환산월세"
+        f"{spatial_unit}"
+    )
+
+    st.markdown(
+        f"**기준 보증금 {selected_deposit_label} · "
+        f"전용면적 {area_min}~{area_max}㎡**"
     )
 
     col1, col2, col3 = st.columns(3)
@@ -334,12 +495,25 @@ if submit_button:
         f"{df['환산월세(만원)'].median():.1f}만원"
     )
 
-    st.caption(
-        f"보증금 {base_deposit:,}만원을 기준으로 "
-        f"환산한 월세입니다."
-    )
+    if base_deposit == 0:
+        st.caption(
+            "실제 보증금이 없는 월세 거래를 기준으로 비교합니다."
+        )
 
-    # 12. 법정동별
+    elif base_deposit == 500:
+        st.caption(
+            "실제 보증금 1~999만원 거래를 "
+            "보증금 500만원 기준 월세로 환산했습니다."
+        )
+
+    else:
+        st.caption(
+            f"실제 보증금 {dep_min:,}~{dep_max - 1:,}만원 "
+            f"거래를 보증금 {base_deposit:,}만원 기준 "
+            f"월세로 환산했습니다."
+        )
+
+    # 15. 법정동별
     if spatial_unit == "법정동별":
         dong = load_dong()
 
@@ -368,7 +542,6 @@ if submit_button:
             how="inner"
         )
 
-        # 최소 표본 수
         dong_map = dong_map[
             dong_map["거래건수"] >= 5
         ].copy()
@@ -380,8 +553,7 @@ if submit_button:
             st.stop()
 
         dong_map, vmin, vmax = add_map_color(
-            dong_map,
-            "평균"
+            dong_map
         )
 
         dong_layer = pdk.Layer(
@@ -421,10 +593,9 @@ if submit_button:
         )
 
         st.caption(
-            f"지도 색상은 법정동별 평균 환산월세의 "
+            f"색상은 법정동별 평균 환산월세의 "
             f"5~95분위({vmin:.1f}~{vmax:.1f}만원)를 "
-            f"기준으로 표시하며, 거래 5건 미만 지역은 "
-            f"제외했습니다."
+            f"기준으로 하며 거래 5건 미만 지역은 제외합니다."
         )
 
         display_df = (
@@ -438,10 +609,7 @@ if submit_button:
                     "최고"
                 ]
             ]
-            .sort_values(
-                "평균",
-                ascending=False
-            )
+            .sort_values("평균", ascending=False)
             .rename(
                 columns={
                     "EMD_NM": "법정동",
@@ -462,7 +630,7 @@ if submit_button:
                 hide_index=True
             )
 
-    # 13. 500m 격자별
+    # 16. 격자별
     elif spatial_unit == "격자별":
         grid = load_grid()
 
@@ -474,7 +642,6 @@ if submit_button:
         grid_df["grid_id"] = (
             grid_df["grid_id"].astype("Int64")
         )
-
         grid["grid_id"] = (
             grid["grid_id"].astype("Int64")
         )
@@ -501,8 +668,7 @@ if submit_button:
             st.stop()
 
         grid_map, vmin, vmax = add_map_color(
-            grid_map,
-            "평균"
+            grid_map
         )
 
         grid_layer = pdk.Layer(
@@ -542,10 +708,9 @@ if submit_button:
         )
 
         st.caption(
-            f"500m 격자별 평균 환산월세입니다. "
-            f"색상은 5~95분위"
-            f"({vmin:.1f}~{vmax:.1f}만원)를 기준으로 "
-            f"표시하며, 거래 5건 미만 격자는 제외했습니다."
+            f"색상은 500m 격자별 평균 환산월세의 "
+            f"5~95분위({vmin:.1f}~{vmax:.1f}만원)를 "
+            f"기준으로 하며 거래 5건 미만 격자는 제외합니다."
         )
 
         display_df = (
@@ -559,10 +724,7 @@ if submit_button:
                     "최고"
                 ]
             ]
-            .sort_values(
-                "평균",
-                ascending=False
-            )
+            .sort_values("평균", ascending=False)
             .rename(
                 columns={
                     "평균": "평균 환산월세",
@@ -582,14 +744,12 @@ if submit_button:
                 hide_index=True
             )
 
-    # 14. 지하철역별
+    # 17. 지하철역별
     elif spatial_unit == "지하철역별":
         rent_station = load_rent_station()
         subway = load_subway()
         gu = load_gu()
 
-        # 현재 필터에 남은 거래와
-        # 500m 역세권 관계 연결
         station_match = rent_station.merge(
             df[
                 [
@@ -603,8 +763,7 @@ if submit_button:
 
         if station_match.empty:
             st.warning(
-                "선택한 조건에 해당하는 "
-                "역세권 거래가 없습니다."
+                "선택한 조건에 해당하는 역세권 거래가 없습니다."
             )
             st.stop()
 
@@ -619,7 +778,6 @@ if submit_button:
             how="inner"
         )
 
-        # 선택 노선 필터
         if selected_subway_lines:
             station_map = station_map[
                 station_map["hoseon"].apply(
@@ -634,24 +792,21 @@ if submit_button:
                 )
             ].copy()
 
-        # 최소 표본 수
         station_map = station_map[
             station_map["거래건수"] >= 5
         ].copy()
 
         if station_map.empty:
             st.warning(
-                "선택한 조건에 해당하는 "
-                "거래 5건 이상의 지하철역이 없습니다."
+                "선택한 조건에 해당하는 거래 5건 이상의 "
+                "지하철역이 없습니다."
             )
             st.stop()
 
         station_map, vmin, vmax = add_map_color(
-            station_map,
-            "평균"
+            station_map
         )
 
-        # 거래건수에 따라 원 크기 조절
         station_map["radius"] = (
             100
             + np.sqrt(
@@ -662,8 +817,6 @@ if submit_button:
             upper=400
         )
 
-        # ScatterplotLayer에서는
-        # shapely geometry가 필요 없으므로 제거
         station_data = pd.DataFrame(
             station_map.drop(
                 columns="geometry",
@@ -671,7 +824,6 @@ if submit_button:
             )
         )
 
-        # 자치구 경계
         gu_layer = pdk.Layer(
             "GeoJsonLayer",
             data=gu,
@@ -682,7 +834,6 @@ if submit_button:
             pickable=False
         )
 
-        # 지하철역
         station_layer = pdk.Layer(
             "ScatterplotLayer",
             data=station_data,
@@ -706,7 +857,6 @@ if submit_button:
             station_layer
         ]
 
-        # 노선을 선택한 경우 역명 표시
         if selected_subway_lines:
             station_text_layer = pdk.Layer(
                 "TextLayer",
@@ -762,8 +912,7 @@ if submit_button:
                 f"{line_text} 역의 500m 역세권 기준입니다. "
                 f"색상은 평균 환산월세의 5~95분위"
                 f"({vmin:.1f}~{vmax:.1f}만원), "
-                f"원의 크기는 거래건수를 나타냅니다. "
-                f"거래 5건 미만 역은 제외했습니다."
+                f"원의 크기는 거래건수를 나타냅니다."
             )
 
         else:
@@ -771,8 +920,7 @@ if submit_button:
                 f"서울 지하철역의 500m 역세권 기준입니다. "
                 f"색상은 평균 환산월세의 5~95분위"
                 f"({vmin:.1f}~{vmax:.1f}만원), "
-                f"원의 크기는 거래건수를 나타냅니다. "
-                f"거래 5건 미만 역은 제외했습니다."
+                f"원의 크기는 거래건수를 나타냅니다."
             )
 
         display_df = (
@@ -787,10 +935,7 @@ if submit_button:
                     "최고"
                 ]
             ]
-            .sort_values(
-                "평균",
-                ascending=False
-            )
+            .sort_values("평균", ascending=False)
             .rename(
                 columns={
                     "station_name": "역명",
@@ -812,8 +957,138 @@ if submit_button:
                 hide_index=True
             )
 
+    # 18. 서울 임대시장 가격 구조
+    st.divider()
+    st.subheader("📈 서울 임대시장의 가격 구조")
+
+    chart_col1, chart_col2 = st.columns(2)
+
+    # 보증금별 실제 월세
+    deposit_stats = make_deposit_stats(
+        common_df,
+        area_min,
+        area_max
+    )
+
+    with chart_col1:
+        st.markdown(
+            "#### 보증금 수준별 월세"
+        )
+
+        st.caption(
+            f"전용면적 {area_min}~{area_max}㎡의 "
+            f"실제 월세 중앙값입니다."
+        )
+
+        deposit_chart = (
+            alt.Chart(deposit_stats)
+            .mark_line(
+                point=True,
+                strokeWidth=2
+            )
+            .encode(
+                x=alt.X(
+                    "보증금기준:N",
+                    sort=list(DEPOSIT_OPTIONS.keys()),
+                    title="보증금 수준"
+                ),
+                y=alt.Y(
+                    "중앙월세:Q",
+                    title="월세 중앙값 (만원)"
+                ),
+                tooltip=[
+                    alt.Tooltip(
+                        "보증금기준:N",
+                        title="보증금"
+                    ),
+                    alt.Tooltip(
+                        "중앙월세:Q",
+                        title="중앙 월세",
+                        format=".1f"
+                    ),
+                    alt.Tooltip(
+                        "평균월세:Q",
+                        title="평균 월세",
+                        format=".1f"
+                    ),
+                    alt.Tooltip(
+                        "거래건수:Q",
+                        title="거래건수",
+                        format=","
+                    )
+                ]
+            )
+        )
+
+        st.altair_chart(
+            deposit_chart,
+            use_container_width=True
+        )
+
+    # 면적별 환산월세
+    area_stats = make_area_stats(
+        common_df,
+        dep_min,
+        dep_max,
+        base_deposit
+    )
+
+    with chart_col2:
+        st.markdown(
+            "#### 면적별 월세"
+        )
+
+        st.caption(
+            f"보증금 {selected_deposit_label} 기준 "
+            f"환산월세 중앙값입니다."
+        )
+
+        area_chart = (
+            alt.Chart(area_stats)
+            .mark_line(
+                point=True,
+                strokeWidth=2
+            )
+            .encode(
+                x=alt.X(
+                    "면적대:N",
+                    title="전용면적 (㎡)"
+                ),
+                y=alt.Y(
+                    "중앙월세:Q",
+                    title="환산월세 중앙값 (만원)"
+                ),
+                tooltip=[
+                    alt.Tooltip(
+                        "면적대:N",
+                        title="면적대"
+                    ),
+                    alt.Tooltip(
+                        "중앙월세:Q",
+                        title="중앙 환산월세",
+                        format=".1f"
+                    ),
+                    alt.Tooltip(
+                        "평균월세:Q",
+                        title="평균 환산월세",
+                        format=".1f"
+                    ),
+                    alt.Tooltip(
+                        "거래건수:Q",
+                        title="거래건수",
+                        format=","
+                    )
+                ]
+            )
+        )
+
+        st.altair_chart(
+            area_chart,
+            use_container_width=True
+        )
+
 else:
     st.info(
         "왼쪽 사이드바에서 검색 조건을 선택한 후 "
-        "'시각화 실행' 버튼을 눌러주세요."
+        "'우리집 찾기' 버튼을 눌러주세요."
     )
