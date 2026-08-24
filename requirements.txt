@@ -5,3 +5,5 @@ pyarrow
 pydeck
 numpy
 matplotlib
+shapely
+pyogrio
