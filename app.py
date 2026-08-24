@@ -159,7 +159,7 @@ with st.sidebar.form("search_form"):
     )
 
     st.caption(
-        f"선택 면적: {area_min}㎡ ~ {area_max}㎡"
+        f"선택 면적: {area_min}㎡ - {area_max}㎡"
     )
 
     selected_age = st.selectbox(
@@ -385,7 +385,7 @@ def make_area_stats(
     bins = list(range(5, 95, 5))
 
     labels = [
-        f"{start}~{start + 5}"
+        f"{start}-{start + 5}"
         for start in bins[:-1]
     ]
 
@@ -475,7 +475,7 @@ if submit_button:
 
     st.markdown(
         f"**기준 보증금 {selected_deposit_label} · "
-        f"전용면적 {area_min}~{area_max}㎡**"
+        f"전용면적 {area_min}-{area_max}㎡**"
     )
 
     col1, col2, col3 = st.columns(3)
@@ -502,13 +502,13 @@ if submit_button:
 
     elif base_deposit == 500:
         st.caption(
-            "실제 보증금 1~999만원 거래를 "
+            "실제 보증금 1-999만원 거래를 "
             "보증금 500만원 기준 월세로 환산했습니다."
         )
 
     else:
         st.caption(
-            f"실제 보증금 {dep_min:,}~{dep_max - 1:,}만원 "
+            f"실제 보증금 {dep_min:,}-{dep_max - 1:,}만원 "
             f"거래를 보증금 {base_deposit:,}만원 기준 "
             f"월세로 환산했습니다."
         )
@@ -594,7 +594,7 @@ if submit_button:
 
         st.caption(
             f"색상은 법정동별 평균 환산월세의 "
-            f"5~95분위({vmin:.1f}~{vmax:.1f}만원)를 "
+            f"5-95분위({vmin:.1f}-{vmax:.1f}만원)를 "
             f"기준으로 하며 거래 5건 미만 지역은 제외합니다."
         )
 
@@ -709,7 +709,7 @@ if submit_button:
 
         st.caption(
             f"색상은 500m 격자별 평균 환산월세의 "
-            f"5~95분위({vmin:.1f}~{vmax:.1f}만원)를 "
+            f"5-95분위({vmin:.1f}-{vmax:.1f}만원)를 "
             f"기준으로 하며 거래 5건 미만 격자는 제외합니다."
         )
 
@@ -910,16 +910,16 @@ if submit_button:
 
             st.caption(
                 f"{line_text} 역의 500m 역세권 기준입니다. "
-                f"색상은 평균 환산월세의 5~95분위"
-                f"({vmin:.1f}~{vmax:.1f}만원), "
+                f"색상은 평균 환산월세의 5-95분위"
+                f"({vmin:.1f}-{vmax:.1f}만원), "
                 f"원의 크기는 거래건수를 나타냅니다."
             )
 
         else:
             st.caption(
                 f"서울 지하철역의 500m 역세권 기준입니다. "
-                f"색상은 평균 환산월세의 5~95분위"
-                f"({vmin:.1f}~{vmax:.1f}만원), "
+                f"색상은 평균 환산월세의 5-95분위"
+                f"({vmin:.1f}-{vmax:.1f}만원), "
                 f"원의 크기는 거래건수를 나타냅니다."
             )
 
@@ -976,7 +976,7 @@ if submit_button:
         )
 
         st.caption(
-            f"전용면적 {area_min}~{area_max}㎡의 "
+            f"전용면적 {area_min}-{area_max}㎡의 "
             f"실제 월세 중앙값입니다."
         )
 
