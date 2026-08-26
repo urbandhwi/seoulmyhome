@@ -204,7 +204,7 @@ with st.sidebar.form("search_form"):
     )
 
     area_min, area_max = st.slider(
-        "전용면적 (㎡)",
+        "임대면적 (㎡)",
         min_value=5,
         max_value=85,
         step=1,
@@ -1001,7 +1001,7 @@ if run_search:
 
     st.markdown(
         f"**기준 보증금 {selected_deposit_label} · "
-        f"전용면적 {area_min}-{area_max}㎡ · "
+        f"임대면적 {area_min}-{area_max}㎡ · "
         f"건물 연식 {age_min}-{age_max}년**"
     )
 
@@ -1797,7 +1797,7 @@ if run_search:
         )
 
         st.caption(
-            f"전용면적 {area_min}-{area_max}㎡의 "
+            f"임대면적 {area_min}-{area_max}㎡의 "
             f"실제 월세 중앙값입니다."
         )
 
@@ -1874,7 +1874,7 @@ if run_search:
             .encode(
                 x=alt.X(
                     "면적대:N",
-                    title="전용면적 (㎡)"
+                    title="임대면적 (㎡)"
                 ),
                 y=alt.Y(
                     "중앙월세:Q",
