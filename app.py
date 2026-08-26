@@ -307,7 +307,7 @@ preset_col2.button(
 preset_col3, preset_col4 = st.sidebar.columns(2)
 
 preset_col3.button(
-    "1000(신축) 8-12평",
+    "1000(신축)",
     use_container_width=True,
     on_click=apply_preset,
     args=(
