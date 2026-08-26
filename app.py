@@ -283,17 +283,6 @@ st.sidebar.caption(
 preset_col1, preset_col2 = st.sidebar.columns(2)
 
 preset_col1.button(
-    "1000 · 4-5평",
-    use_container_width=True,
-    on_click=apply_preset,
-    args=(
-        "1,000만원",
-        (13, 17),
-        (0, 25)
-    )
-)
-
-preset_col2.button(
     "1000 · 5-7평",
     use_container_width=True,
     on_click=apply_preset,
@@ -304,24 +293,60 @@ preset_col2.button(
     )
 )
 
-preset_col3, preset_col4 = st.sidebar.columns(2)
-
-preset_col3.button(
-    "2000 · 신축원룸",
+preset_col2.button(
+    "1000 · 8-12평",
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        "2,000만원",
-        (16, 23),
+        "1,000만원",
+        (26, 40),
+        (0, 25)
+    )
+)
+
+preset_col3, preset_col4 = st.sidebar.columns(2)
+
+preset_col3.button(
+    "1000(신축) 8-12평",
+    use_container_width=True,
+    on_click=apply_preset,
+    args=(
+        "1,000만원",
+        (26, 40),
         (0, 10)
     )
 )
 
 preset_col4.button(
+    "2000 · 8-12평",
+    use_container_width=True,
+    on_click=apply_preset,
+    args=(
+        "2,000만원",
+        (26, 40),
+        (0, 25)
+    )
+)
+
+preset_col5, preset_col6 = st.sidebar.columns(2)
+
+preset_col5.button(
+    "3000 · 8-12평",
+    use_container_width=True,
+    on_click=apply_preset,
+    args=(
+        "3,000만원",
+        (26, 40),
+        (0, 10)
+    )
+)
+
+preset_col6.button(
     "조건 초기화",
     use_container_width=True,
     on_click=reset_filters
 )
+
 
 # 프리셋 버튼도 검색 실행
 run_search = (
