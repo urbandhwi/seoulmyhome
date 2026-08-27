@@ -114,62 +114,24 @@ def get_deposit_range(base_deposit):
         return 1, 1000
     return base_deposit, base_deposit + 1000
 
-def format_deposit_selection(base_deposits):
-    return ", ".join(
-        deposit_label(value)
-        for value in sorted(base_deposits)
-    )
-
-def make_deposit_rule_text(base_deposits):
-    rules = []
-
-    for base in sorted(base_deposits):
-        dep_min, dep_max = get_deposit_range(base)
-
-        if base == 0:
-            rules.append("무보증 거래 → 무보증 기준")
-        else:
-            rules.append(
-                f"{dep_min:,}-{dep_max - 1:,}만원 → "
-                f"{base:,}만원 기준"
-            )
-
-    return " / ".join(rules)
-
-# 면적별 그래프 순서를 명시적으로 고정
-AREA_BINS = list(range(5, 95, 5))
-AREA_LABELS = [
-    f"{start}-{start + 5}"
-    for start in AREA_BINS[:-1]
-]
-
 # 5. 위젯 기본값
 st.session_state.setdefault("house_type_widget", "전체")
 st.session_state.setdefault("spatial_unit_widget", "법정동별")
 st.session_state.setdefault("subway_lines_widget", [])
 st.session_state.setdefault("year_widget", 2025)
-st.session_state.setdefault(
-    "deposit_widget",
-    ["1,000만원"]
-)
+st.session_state.setdefault("deposit_widget", "1,000만원")
 st.session_state.setdefault("area_widget", (15, 30))
 st.session_state.setdefault("age_widget", (0, 100))
-st.session_state.setdefault(
-    "floor_widget",
-    "지하·반지하 제외"
-)
+st.session_state.setdefault("floor_widget", "지하·반지하 제외")
 st.session_state.setdefault("count_label_widget", False)
 st.session_state.setdefault("show_policy_widget", True)
-st.session_state.setdefault(
-    "policy_priority_widget",
-    "청년 1순위"
-)
+st.session_state.setdefault("policy_priority_widget", "청년 1순위")
 
 # 6. 프리셋
 def apply_preset(
-    deposits,
+    deposit,
     area,
-    age=(0, 100),
+    age,
     floor="지하·반지하 제외",
     house_type="전체"
 ):
@@ -177,7 +139,7 @@ def apply_preset(
     st.session_state["spatial_unit_widget"] = "법정동별"
     st.session_state["subway_lines_widget"] = []
     st.session_state["year_widget"] = 2025
-    st.session_state["deposit_widget"] = deposits
+    st.session_state["deposit_widget"] = deposit
     st.session_state["area_widget"] = area
     st.session_state["age_widget"] = age
     st.session_state["floor_widget"] = floor
@@ -190,7 +152,7 @@ def reset_filters():
     st.session_state["spatial_unit_widget"] = "법정동별"
     st.session_state["subway_lines_widget"] = []
     st.session_state["year_widget"] = 2025
-    st.session_state["deposit_widget"] = ["1,000만원"]
+    st.session_state["deposit_widget"] = "1,000만원"
     st.session_state["area_widget"] = (15, 30)
     st.session_state["age_widget"] = (0, 100)
     st.session_state["floor_widget"] = "지하·반지하 제외"
@@ -231,19 +193,18 @@ with st.sidebar.form("search_form"):
         key="year_widget"
     )
 
-    selected_deposit_labels = st.multiselect(
+    selected_deposit_label = st.selectbox(
         "기준 보증금",
-        options=list(DEPOSIT_OPTIONS.keys()),
+        list(DEPOSIT_OPTIONS.keys()),
         key="deposit_widget",
         help=(
-            "여러 보증금 기준을 함께 선택할 수 있습니다. "
-            "각 거래는 실제 보증금이 속한 구간의 기준 "
-            "보증금으로 각각 환산합니다."
+            "선택한 보증금 구간의 거래를 대표 보증금으로 "
+            "환산하여 비교합니다."
         )
     )
 
     area_min, area_max = st.slider(
-        "임대면적 (㎡)",
+        "전용면적 (㎡)",
         min_value=5,
         max_value=85,
         step=1,
@@ -274,7 +235,8 @@ with st.sidebar.form("search_form"):
         "층수",
         [
             "전체",
-            "지하·반지하 제외"
+            "지하·반지하 제외",
+            "저층 (1층 이하)"
         ],
         key="floor_widget"
     )
@@ -321,65 +283,41 @@ st.sidebar.caption(
 preset_col1, preset_col2 = st.sidebar.columns(2)
 
 preset_col1.button(
-    "1000 · 5-7평",
+    "1000 · 4-5평",
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        ["1,000만원"],
-        (16, 23),
-        (0, 100)
+        "1,000만원",
+        (13, 17),
+        (0, 25)
     )
 )
 
 preset_col2.button(
-    "1000 · 8-12평",
+    "1000 · 5-7평",
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        ["1,000만원"],
-        (26, 40),
-        (0, 100)
+        "1,000만원",
+        (16, 23),
+        (0, 25)
     )
 )
 
 preset_col3, preset_col4 = st.sidebar.columns(2)
 
 preset_col3.button(
-    "1000(신축)",
+    "2000 · 신축원룸",
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        ["1,000만원"],
-        (26, 40),
+        "2,000만원",
+        (16, 23),
         (0, 10)
     )
 )
 
 preset_col4.button(
-    "2000 · 8-12평",
-    use_container_width=True,
-    on_click=apply_preset,
-    args=(
-        ["2,000만원"],
-        (26, 40),
-        (0, 100)
-    )
-)
-
-preset_col5, preset_col6 = st.sidebar.columns(2)
-
-preset_col5.button(
-    "3000 · 8-12평",
-    use_container_width=True,
-    on_click=apply_preset,
-    args=(
-        ["3,000만원"],
-        (26, 40),
-        (0, 100)
-    )
-)
-
-preset_col6.button(
     "조건 초기화",
     use_container_width=True,
     on_click=reset_filters
@@ -423,67 +361,35 @@ def filter_common_data(
             df["층"] > 0
         ]
 
+    elif floor == "저층 (1층 이하)":
+        df = df[
+            df["층"] <= 1
+        ]
+
     return df
 
 # 10. 지도용 거래 필터
 def filter_rent_data(
     df,
-    base_deposits,
+    dep_min,
+    dep_max,
+    base_deposit,
     area_min,
     area_max
 ):
-    """
-    여러 기준 보증금을 선택한 경우 각 거래를
-    실제 보증금이 속한 구간의 대표 보증금으로 각각 환산한다.
-    """
-    base_df = df[
+    df = df[
+        (df["보증금(만원)"] >= dep_min) &
+        (df["보증금(만원)"] < dep_max) &
         (df["임대면적"] >= area_min) &
         (df["임대면적"] <= area_max)
     ].copy()
 
-    pieces = []
-
-    for base_deposit in sorted(base_deposits):
-        dep_min, dep_max = get_deposit_range(
-            base_deposit
-        )
-
-        part = base_df[
-            (base_df["보증금(만원)"] >= dep_min) &
-            (base_df["보증금(만원)"] < dep_max)
-        ].copy()
-
-        if part.empty:
-            continue
-
-        part["환산기준보증금"] = base_deposit
-
-        part["환산월세(만원)"] = (
-            part["임대료(만원)"]
-            + (
-                part["보증금(만원)"]
-                - base_deposit
-            ) * 0.005
-        )
-
-        pieces.append(part)
-
-    if not pieces:
-        empty = base_df.iloc[0:0].copy()
-        empty["환산기준보증금"] = pd.Series(
-            dtype="float64"
-        )
-        empty["환산월세(만원)"] = pd.Series(
-            dtype="float64"
-        )
-        return empty
-
-    result = pd.concat(
-        pieces,
-        ignore_index=True
+    df["환산월세(만원)"] = (
+        df["임대료(만원)"]
+        + (df["보증금(만원)"] - base_deposit) * 0.005
     )
 
-    return result
+    return df
 
 # 11. 공간 단위별 통계
 def aggregate_rent(df, group_cols):
@@ -658,29 +564,36 @@ def make_deposit_stats(
 # 15. 면적별 월세 통계
 def make_area_stats(
     df,
-    base_deposits
+    dep_min,
+    dep_max,
+    base_deposit
 ):
-    chart_df = filter_rent_data(
-        df,
-        base_deposits,
-        5,
-        85
+    chart_df = df[
+        (df["보증금(만원)"] >= dep_min) &
+        (df["보증금(만원)"] < dep_max) &
+        (df["임대면적"] >= 5) &
+        (df["임대면적"] <= 85)
+    ].copy()
+
+    chart_df["환산월세(만원)"] = (
+        chart_df["임대료(만원)"]
+        + (
+            chart_df["보증금(만원)"]
+            - base_deposit
+        ) * 0.005
     )
 
-    if chart_df.empty:
-        return pd.DataFrame(
-            columns=[
-                "면적대",
-                "거래건수",
-                "평균월세",
-                "중앙월세"
-            ]
-        )
+    bins = list(range(5, 95, 5))
+
+    labels = [
+        f"{start}-{start + 5}"
+        for start in bins[:-1]
+    ]
 
     chart_df["면적대"] = pd.cut(
         chart_df["임대면적"],
-        bins=AREA_BINS,
-        labels=AREA_LABELS,
+        bins=bins,
+        labels=labels,
         right=False
     )
 
@@ -709,7 +622,6 @@ def make_area_stats(
 
     return stats
 
-
 # 16. 정책주택 조건 필터 및 공식 임대조건 비교
 def prepare_policy_data(
     policy_units,
@@ -719,11 +631,11 @@ def prepare_policy_data(
     area_max,
     floor,
     priority,
-    base_deposits
+    base_deposit
 ):
     units = policy_units.copy()
 
-    # 정책주택은 공고상 전용면적 기준
+    # 민간 검색조건 중 정책주택 자료로 확인 가능한 항목만 적용
     units = units[
         (units["전용면적"] >= area_min) &
         (units["전용면적"] <= area_max)
@@ -750,6 +662,11 @@ def prepare_policy_data(
             units["층"] > 0
         ].copy()
 
+    elif floor == "저층 (1층 이하)":
+        units = units[
+            units["층"] <= 1
+        ].copy()
+
     if priority == "청년 1순위":
         prefix = "청년1순위"
     else:
@@ -773,91 +690,75 @@ def prepare_policy_data(
             errors="coerce"
         )
 
-    if units.empty:
-        return (
-            units,
-            pd.DataFrame(),
-            pd.DataFrame()
-        )
+    units["정책월세_만원"] = np.nan
 
-    # 여러 기준 보증금을 각각 하나의 시나리오로 계산
-    scenario_frames = []
+    dep_gap = (
+        units[max_dep_col]
+        - units[basic_dep_col]
+    )
 
-    for base_deposit in sorted(base_deposits):
-        scenario = units.copy()
+    comparable = (
+        units[basic_dep_col].notna() &
+        units[basic_rent_col].notna() &
+        units[max_dep_col].notna() &
+        units[max_rent_col].notna() &
+        (dep_gap > 0) &
+        (base_deposit >= units[basic_dep_col]) &
+        (base_deposit <= units[max_dep_col])
+    )
 
-        dep_gap = (
-            scenario[max_dep_col]
-            - scenario[basic_dep_col]
-        )
-
-        comparable = (
-            scenario[basic_dep_col].notna() &
-            scenario[basic_rent_col].notna() &
-            scenario[max_dep_col].notna() &
-            scenario[max_rent_col].notna() &
-            (dep_gap > 0) &
-            (base_deposit >= scenario[basic_dep_col]) &
-            (base_deposit <= scenario[max_dep_col])
-        )
-
-        scenario["기준보증금_만원"] = base_deposit
-        scenario["정책월세_만원"] = np.nan
-        scenario["비교가능"] = comparable
-
-        # LH 공고의 기본 조건과 최대전환 조건 사이 선형 보간
-        scenario.loc[
+    # LH 공고의 기본 임대조건과 최대전환 임대조건 사이를
+    # 선형 보간하여 선택 보증금에 대응하는 월세를 계산
+    units.loc[
+        comparable,
+        "정책월세_만원"
+    ] = (
+        units.loc[
             comparable,
-            "정책월세_만원"
-        ] = (
-            scenario.loc[
+            basic_rent_col
+        ]
+        + (
+            base_deposit
+            - units.loc[
+                comparable,
+                basic_dep_col
+            ]
+        )
+        * (
+            units.loc[
+                comparable,
+                max_rent_col
+            ]
+            - units.loc[
                 comparable,
                 basic_rent_col
             ]
-            + (
-                base_deposit
-                - scenario.loc[
-                    comparable,
-                    basic_dep_col
-                ]
-            )
-            * (
-                scenario.loc[
-                    comparable,
-                    max_rent_col
-                ]
-                - scenario.loc[
-                    comparable,
-                    basic_rent_col
-                ]
-            )
-            / dep_gap.loc[comparable]
         )
-
-        scenario["정책월세_만원"] = (
-            scenario["정책월세_만원"]
-            .round(1)
-        )
-
-        scenario_frames.append(
-            scenario
-        )
-
-    policy_scenarios = pd.concat(
-        scenario_frames,
-        ignore_index=True
+        / dep_gap.loc[comparable]
     )
 
-    # 공급호수와 면적은 보증금 시나리오 수와 무관하게
-    # 실제 공급호실 기준으로 집계
-    supply_stats = (
+    units["정책월세_만원"] = (
+        units["정책월세_만원"]
+        .round(1)
+    )
+
+    units["비교가능"] = comparable
+
+    if units.empty:
+        return units, pd.DataFrame()
+
+    policy_stats = (
         units.groupby(
             "building_id"
         )
         .agg(
             조건공급호수=(
                 "policy_unit_id",
-                "nunique"
+                "count"
+            ),
+            비교가능호수=(
+                "비교가능",
+                "sum"
             ),
             전용면적_최소=(
                 "전용면적",
@@ -866,99 +767,25 @@ def prepare_policy_data(
             전용면적_최대=(
                 "전용면적",
                 "max"
+            ),
+            정책월세_평균=(
+                "정책월세_만원",
+                "mean"
+            ),
+            정책월세_중앙=(
+                "정책월세_만원",
+                "median"
+            ),
+            정책월세_최저=(
+                "정책월세_만원",
+                "min"
+            ),
+            정책월세_최고=(
+                "정책월세_만원",
+                "max"
             )
         )
         .reset_index()
-    )
-
-    comparable_scenarios = (
-        policy_scenarios[
-            policy_scenarios[
-                "정책월세_만원"
-            ].notna()
-        ]
-        .copy()
-    )
-
-    if comparable_scenarios.empty:
-        comparison_stats = pd.DataFrame(
-            columns=[
-                "building_id",
-                "비교가능호수",
-                "비교가능조합수",
-                "정책월세_평균",
-                "정책월세_중앙",
-                "정책월세_최저",
-                "정책월세_최고"
-            ]
-        )
-    else:
-        price_stats = (
-            comparable_scenarios
-            .groupby("building_id")
-            .agg(
-                비교가능조합수=(
-                    "정책월세_만원",
-                    "count"
-                ),
-                정책월세_평균=(
-                    "정책월세_만원",
-                    "mean"
-                ),
-                정책월세_중앙=(
-                    "정책월세_만원",
-                    "median"
-                ),
-                정책월세_최저=(
-                    "정책월세_만원",
-                    "min"
-                ),
-                정책월세_최고=(
-                    "정책월세_만원",
-                    "max"
-                )
-            )
-            .reset_index()
-        )
-
-        comparable_units = (
-            comparable_scenarios
-            .groupby("building_id")[
-                "policy_unit_id"
-            ]
-            .nunique()
-            .rename("비교가능호수")
-            .reset_index()
-        )
-
-        comparison_stats = (
-            price_stats
-            .merge(
-                comparable_units,
-                on="building_id",
-                how="left"
-            )
-        )
-
-    policy_stats = (
-        supply_stats
-        .merge(
-            comparison_stats,
-            on="building_id",
-            how="left"
-        )
-    )
-
-    policy_stats["비교가능호수"] = (
-        policy_stats["비교가능호수"]
-        .fillna(0)
-        .astype(int)
-    )
-
-    policy_stats["비교가능조합수"] = (
-        policy_stats["비교가능조합수"]
-        .fillna(0)
-        .astype(int)
     )
 
     for col in [
@@ -970,8 +797,7 @@ def prepare_policy_data(
         "정책월세_최고"
     ]:
         policy_stats[col] = (
-            policy_stats[col]
-            .round(1)
+            policy_stats[col].round(1)
         )
 
     static_cols = [
@@ -998,20 +824,14 @@ def prepare_policy_data(
         policy_map["latitude"].notna()
     ].copy()
 
-    # TextLayer용 사각형 마커
-    policy_map["marker_symbol"] = "■"
-    policy_map["marker_size"] = (
-        15
+    policy_map["radius"] = (
+        100
         + np.sqrt(
             policy_map["조건공급호수"]
-        ) * 2
+        ) * 25
     ).clip(
-        lower=16,
-        upper=27
-    )
-
-    deposit_text = format_deposit_selection(
-        base_deposits
+        lower=120,
+        upper=320
     )
 
     policy_map["tip_title"] = (
@@ -1040,8 +860,8 @@ def prepare_policy_data(
 
     policy_map["tip_3"] = (
         priority
-        + " · 기준보증금 "
-        + deposit_text
+        + " · 보증금 "
+        + f"{base_deposit:,}만원 기준"
     )
 
     policy_map["tip_4"] = policy_map[
@@ -1057,146 +877,33 @@ def prepare_policy_data(
         policy_map["지오코딩주소"]
     )
 
-    return (
-        units,
-        policy_scenarios,
-        policy_map
-    )
+    return units, policy_map
 
 
 def make_policy_layer(policy_map):
     if policy_map.empty:
         return None
 
-    # 별도 이미지 파일 없이 안정적으로 표시되는 사각형 마커
     return pdk.Layer(
-        "TextLayer",
+        "ScatterplotLayer",
         data=policy_map,
         get_position=[
             "longitude",
             "latitude"
         ],
-        get_text="marker_symbol",
-        get_size="marker_size",
-        get_color=[
-            92, 76, 180, 235
+        get_fill_color=[
+            92, 76, 180, 220
         ],
-        get_text_anchor='"middle"',
-        get_alignment_baseline='"center"',
-        pickable=True
-    )
-
-
-def make_subway_line_stats(
-    station_match,
-    subway,
-    valid_station_ids,
-    selected_lines=None
-):
-    """
-    지도에 표시되는 역을 기준으로 노선별 가격을 집계한다.
-    한 거래가 같은 노선의 여러 역 500m권에 포함되어도
-    노선별 집계에서는 한 번만 계산한다.
-    """
-    source = station_match[
-        station_match["station_id"].isin(
-            valid_station_ids
-        )
-    ].copy()
-
-    if source.empty:
-        return pd.DataFrame()
-
-    if "hoseon" not in source.columns:
-        source = source.merge(
-            subway[
-                [
-                    "station_id",
-                    "hoseon"
-                ]
-            ].drop_duplicates(
-                "station_id"
-            ),
-            on="station_id",
-            how="left"
-        )
-
-    line_df = source[
-        [
-            "rent_id",
-            "hoseon",
-            "환산월세(만원)"
-        ]
-    ].copy()
-
-    line_df["노선"] = (
-        line_df["hoseon"]
-        .fillna("")
-        .astype(str)
-        .str.split(",")
-    )
-
-    line_df = line_df.explode(
-        "노선"
-    )
-
-    line_df["노선"] = (
-        line_df["노선"]
-        .astype(str)
-        .str.strip()
-    )
-
-    line_df = line_df[
-        line_df["노선"] != ""
-    ].copy()
-
-    if selected_lines:
-        line_df = line_df[
-            line_df["노선"].isin(
-                selected_lines
-            )
-        ].copy()
-
-    # 같은 거래가 같은 노선의 인접 역 여러 곳에 잡히는 중복 제거
-    line_df = (
-        line_df
-        .drop_duplicates(
-            subset=[
-                "rent_id",
-                "노선"
-            ]
-        )
-    )
-
-    stats = (
-        line_df
-        .groupby("노선")
-        .agg(
-            거래건수=(
-                "환산월세(만원)",
-                "count"
-            ),
-            평균=(
-                "환산월세(만원)",
-                "mean"
-            ),
-            중앙=(
-                "환산월세(만원)",
-                "median"
-            )
-        )
-        .reset_index()
-    )
-
-    stats["평균"] = (
-        stats["평균"].round(1)
-    )
-    stats["중앙"] = (
-        stats["중앙"].round(1)
-    )
-
-    return stats.sort_values(
-        "평균"
+        get_line_color=[
+            255, 255, 255, 230
+        ],
+        get_radius="radius",
+        radius_min_pixels=6,
+        radius_max_pixels=14,
+        stroked=True,
+        line_width_min_pixels=1.5,
+        pickable=True,
+        auto_highlight=True
     )
 
 
@@ -1221,21 +928,12 @@ SEOUL_VIEW = pdk.ViewState(
 
 # 17. 검색 실행
 if run_search:
-    if not selected_deposit_labels:
-        st.warning(
-            "기준 보증금을 하나 이상 선택해 주세요."
-        )
-        st.stop()
-
-    selected_base_deposits = sorted(
-        DEPOSIT_OPTIONS[label]
-        for label in selected_deposit_labels
+    base_deposit = (
+        DEPOSIT_OPTIONS[selected_deposit_label]
     )
 
-    selected_deposit_text = (
-        format_deposit_selection(
-            selected_base_deposits
-        )
+    dep_min, dep_max = get_deposit_range(
+        base_deposit
     )
 
     with st.spinner(
@@ -1254,7 +952,9 @@ if run_search:
 
     df = filter_rent_data(
         common_df,
-        selected_base_deposits,
+        dep_min,
+        dep_max,
+        base_deposit,
         area_min,
         area_max
     )
@@ -1267,7 +967,6 @@ if run_search:
 
     # 정책주택은 필요할 때만 불러오기
     policy_units_filtered = pd.DataFrame()
-    policy_scenarios = pd.DataFrame()
     policy_map = pd.DataFrame()
     policy_layer = None
 
@@ -1277,7 +976,6 @@ if run_search:
 
         (
             policy_units_filtered,
-            policy_scenarios,
             policy_map
         ) = prepare_policy_data(
             policy_units,
@@ -1287,14 +985,14 @@ if run_search:
             area_max,
             selected_floor,
             policy_priority,
-            selected_base_deposits
+            base_deposit
         )
 
         policy_layer = make_policy_layer(
             policy_map
         )
 
-# 18. 결과 요약
+    # 18. 결과 요약
     st.subheader(
         f"📊 {selected_year}년 "
         f"{house_type_selection} "
@@ -1302,7 +1000,7 @@ if run_search:
     )
 
     st.markdown(
-        f"**기준 보증금 {selected_deposit_text} · "
+        f"**기준 보증금 {selected_deposit_label} · "
         f"임대면적 {area_min}-{area_max}㎡ · "
         f"건물 연식 {age_min}-{age_max}년**"
     )
@@ -1324,15 +1022,25 @@ if run_search:
         f"{df['환산월세(만원)'].median():.1f}만원"
     )
 
-    st.caption(
-        "선택한 보증금 구간의 거래를 각 구간 대표 보증금으로 "
-        "각각 환산해 함께 집계합니다. "
-        + make_deposit_rule_text(
-            selected_base_deposits
+    if base_deposit == 0:
+        st.caption(
+            "실제 보증금이 없는 월세 거래를 기준으로 비교합니다."
         )
-    )
 
-# 19. 법정동별
+    elif base_deposit == 500:
+        st.caption(
+            "실제 보증금 1-999만원 거래를 "
+            "보증금 500만원 기준 월세로 환산했습니다."
+        )
+
+    else:
+        st.caption(
+            f"실제 보증금 {dep_min:,}-{dep_max - 1:,}만원 "
+            f"거래를 보증금 {base_deposit:,}만원 기준 "
+            f"월세로 환산했습니다."
+        )
+
+    # 19. 법정동별
     if spatial_unit == "법정동별":
         dong = load_dong()
 
@@ -1754,7 +1462,7 @@ if run_search:
             .map(lambda x: f"{x:.1f}만원")
         )
         station_map["tip_5"] = (
-            "대표 지점 반경 500m"
+            "500m 역세권"
         )
 
         station_data = pd.DataFrame(
@@ -1771,28 +1479,6 @@ if run_search:
             stroked=True,
             get_line_color=[80, 80, 80, 80],
             line_width_min_pixels=0.7,
-            pickable=False
-        )
-
-        # 역 대표지점 기준 500m 범위를 은은하게 표시
-        station_buffer_layer = pdk.Layer(
-            "ScatterplotLayer",
-            data=station_data,
-            get_position=[
-                "longitude",
-                "latitude"
-            ],
-            get_radius=500,
-            radius_units="meters",
-            get_fill_color=[
-                70, 120, 190, 22
-            ],
-            get_line_color=[
-                70, 120, 190, 55
-            ],
-            stroked=True,
-            filled=True,
-            line_width_min_pixels=0.6,
             pickable=False
         )
 
@@ -1816,7 +1502,6 @@ if run_search:
 
         layers = [
             gu_layer,
-            station_buffer_layer,
             station_layer
         ]
 
@@ -1865,8 +1550,7 @@ if run_search:
             )
 
             st.caption(
-                f"{line_text} 역의 대표 지점을 기준으로 "
-                f"반경 500m를 표시했습니다. "
+                f"{line_text} 역의 500m 역세권 기준입니다. "
                 f"색상은 평균 환산월세의 5-95분위"
                 f"({vmin:.1f}-{vmax:.1f}만원), "
                 f"원의 크기는 거래건수를 나타냅니다."
@@ -1874,8 +1558,7 @@ if run_search:
 
         else:
             st.caption(
-                f"서울 지하철역 대표 지점을 기준으로 "
-                f"반경 500m를 표시했습니다. "
+                f"서울 지하철역의 500m 역세권 기준입니다. "
                 f"색상은 평균 환산월세의 5-95분위"
                 f"({vmin:.1f}-{vmax:.1f}만원), "
                 f"원의 크기는 거래건수를 나타냅니다."
@@ -1918,84 +1601,7 @@ if run_search:
                 hide_index=True
             )
 
-        # 지도에 실제 표시되는 역을 기준으로 노선별 집계
-        line_stats = make_subway_line_stats(
-            station_match,
-            subway,
-            station_map["station_id"].tolist(),
-            selected_subway_lines
-        )
-
-        if not line_stats.empty:
-            st.markdown(
-                "#### 🚇 노선별 평균 환산월세"
-            )
-
-            st.caption(
-                "한 거래가 같은 노선의 여러 인접 역 500m권에 "
-                "포함되는 경우 노선별 집계에서는 한 번만 계산합니다."
-            )
-
-            line_chart = (
-                alt.Chart(line_stats)
-                .mark_bar()
-                .encode(
-                    y=alt.Y(
-                        "노선:N",
-                        sort=alt.SortField(
-                            field="평균",
-                            order="ascending"
-                        ),
-                        title=None
-                    ),
-                    x=alt.X(
-                        "평균:Q",
-                        title="평균 환산월세 (만원)"
-                    ),
-                    tooltip=[
-                        alt.Tooltip(
-                            "노선:N",
-                            title="노선"
-                        ),
-                        alt.Tooltip(
-                            "평균:Q",
-                            title="평균 환산월세",
-                            format=".1f"
-                        ),
-                        alt.Tooltip(
-                            "중앙:Q",
-                            title="중앙 환산월세",
-                            format=".1f"
-                        ),
-                        alt.Tooltip(
-                            "거래건수:Q",
-                            title="거래건수",
-                            format=","
-                        )
-                    ]
-                )
-            )
-
-            st.altair_chart(
-                line_chart,
-                use_container_width=True
-            )
-
-            with st.expander(
-                "🚇 노선별 상세 통계 보기"
-            ):
-                st.dataframe(
-                    line_stats.rename(
-                        columns={
-                            "평균": "평균 환산월세",
-                            "중앙": "중앙 환산월세"
-                        }
-                    ),
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-# 22. LH 청년매입임대 결과
+    # 22. LH 청년매입임대 결과
     if show_policy:
         st.divider()
         st.subheader(
@@ -2003,7 +1609,7 @@ if run_search:
         )
 
         st.caption(
-            "정책주택은 공고상 전용면적·층수·주택유형 조건을 적용합니다. "
+            "정책주택은 전용면적·층수·주택유형 조건을 적용합니다. "
             "공고 자료에 건축년도 정보가 없어 건물 연식 조건은 "
             "정책주택 필터에 적용하지 않습니다."
         )
@@ -2026,20 +1632,19 @@ if run_search:
 
             policy_metric2.metric(
                 "조건에 맞는 공급호실",
-                f"{policy_units_filtered['policy_unit_id'].nunique():,}호"
+                f"{len(policy_units_filtered):,}호"
             )
 
-            comparable_scenarios = (
-                policy_scenarios[
-                    policy_scenarios[
-                        "정책월세_만원"
-                    ].notna()
-                ]
+            comparable_units = (
+                policy_units_filtered[
+                    "정책월세_만원"
+                ].notna()
             )
 
-            if not comparable_scenarios.empty:
+            if comparable_units.any():
                 policy_median = (
-                    comparable_scenarios[
+                    policy_units_filtered.loc[
+                        comparable_units,
                         "정책월세_만원"
                     ].median()
                 )
@@ -2056,24 +1661,23 @@ if run_search:
                 )
 
             st.caption(
-                f"보라색 사각형은 조건에 맞는 LH 청년매입임대입니다. "
-                f"{policy_priority}의 공고상 "
+                f"보라색 점은 조건에 맞는 LH 청년매입임대입니다. "
+                f"월세 비교값은 {policy_priority}의 공고상 "
                 f"'기본 임대조건-임대료→보증금 최대전환' 두 지점 "
-                f"사이를 선형 보간하여 선택한 기준 보증금 "
-                f"({selected_deposit_text})별 전환월세를 계산했습니다. "
+                f"사이를 선형 보간하여 보증금 "
+                f"{base_deposit:,}만원 기준으로 계산했습니다. "
                 f"민간 거래에 사용하는 0.5% 환산식은 "
                 f"정책주택에 적용하지 않았습니다."
             )
 
             if (
-                policy_scenarios[
+                policy_units_filtered[
                     "정책월세_만원"
                 ].isna().any()
             ):
                 st.caption(
-                    "선택한 기준 보증금이 해당 호실의 LH 공식 전환 가능 "
-                    "범위를 벗어나는 경우 그 보증금 시나리오는 "
-                    "전환월세 계산에서 제외했습니다."
+                    "선택한 보증금이 해당 호실의 LH 공식 전환 가능 "
+                    "범위를 벗어나는 경우 전환월세는 계산하지 않았습니다."
                 )
 
             policy_display = (
@@ -2129,59 +1733,53 @@ if run_search:
             else:
                 detail_prefix = "청년23순위"
 
-            if not policy_scenarios.empty:
-                policy_unit_display = (
-                    policy_scenarios[
-                        [
-                            "주택명",
-                            "지오코딩주소",
-                            "동호수",
-                            "전용면적",
-                            "층",
-                            "주택유형",
-                            "기준보증금_만원",
-                            f"{detail_prefix}_기본보증금_만원",
-                            f"{detail_prefix}_기본월세_만원",
-                            f"{detail_prefix}_최대전환보증금_만원",
-                            f"{detail_prefix}_최대전환월세_만원",
-                            "정책월세_만원"
-                        ]
+            policy_unit_display = (
+                policy_units_filtered[
+                    [
+                        "주택명",
+                        "지오코딩주소",
+                        "동호수",
+                        "전용면적",
+                        "층",
+                        "주택유형",
+                        f"{detail_prefix}_기본보증금_만원",
+                        f"{detail_prefix}_기본월세_만원",
+                        f"{detail_prefix}_최대전환보증금_만원",
+                        f"{detail_prefix}_최대전환월세_만원",
+                        "정책월세_만원"
                     ]
-                    .sort_values(
-                        [
-                            "기준보증금_만원",
-                            "정책월세_만원"
-                        ],
-                        na_position="last"
-                    )
-                    .rename(
-                        columns={
-                            "지오코딩주소": "주소",
-                            "기준보증금_만원": "선택 기준보증금",
-                            f"{detail_prefix}_기본보증금_만원":
-                                "기본 보증금",
-                            f"{detail_prefix}_기본월세_만원":
-                                "기본 월세",
-                            f"{detail_prefix}_최대전환보증금_만원":
-                                "최대전환 보증금",
-                            f"{detail_prefix}_최대전환월세_만원":
-                                "최대전환 월세",
-                            "정책월세_만원":
-                                "선택 보증금 전환월세"
-                        }
-                    )
+                ]
+                .sort_values(
+                    "정책월세_만원",
+                    na_position="last"
+                )
+                .rename(
+                    columns={
+                        "지오코딩주소": "주소",
+                        f"{detail_prefix}_기본보증금_만원":
+                            "기본 보증금",
+                        f"{detail_prefix}_기본월세_만원":
+                            "기본 월세",
+                        f"{detail_prefix}_최대전환보증금_만원":
+                            "최대전환 보증금",
+                        f"{detail_prefix}_최대전환월세_만원":
+                            "최대전환 월세",
+                        "정책월세_만원":
+                            f"보증금 {base_deposit:,}만원 전환월세"
+                    }
+                )
+            )
+
+            with st.expander(
+                "🚪 정책주택 호실별 임대조건 보기"
+            ):
+                st.dataframe(
+                    policy_unit_display,
+                    use_container_width=True,
+                    hide_index=True
                 )
 
-                with st.expander(
-                    "🚪 정책주택 호실별 임대조건 보기"
-                ):
-                    st.dataframe(
-                        policy_unit_display,
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-# 23. 시장 가격 구조
+    # 23. 시장 가격 구조
     st.divider()
     st.subheader("📈 서울 임대시장의 가격 구조")
 
@@ -2252,7 +1850,9 @@ if run_search:
 
     area_stats = make_area_stats(
         common_df,
-        selected_base_deposits
+        dep_min,
+        dep_max,
+        base_deposit
     )
 
     with chart_col2:
@@ -2261,59 +1861,53 @@ if run_search:
         )
 
         st.caption(
-            f"선택한 기준 보증금({selected_deposit_text})에 "
-            f"각각 환산한 월세 중앙값입니다."
+            f"보증금 {selected_deposit_label} 기준 "
+            f"환산월세 중앙값입니다."
         )
 
-        if area_stats.empty:
-            st.info(
-                "선택한 보증금 조건에 해당하는 면적별 거래가 없습니다."
+        area_chart = (
+            alt.Chart(area_stats)
+            .mark_line(
+                point=True,
+                strokeWidth=2
             )
-        else:
-            area_chart = (
-                alt.Chart(area_stats)
-                .mark_line(
-                    point=True,
-                    strokeWidth=2
-                )
-                .encode(
-                    x=alt.X(
-                        "면적대:O",
-                        sort=AREA_LABELS,
-                        title="임대면적 (㎡)"
+            .encode(
+                x=alt.X(
+                    "면적대:N",
+                    title="임대면적 (㎡)"
+                ),
+                y=alt.Y(
+                    "중앙월세:Q",
+                    title="환산월세 중앙값 (만원)"
+                ),
+                tooltip=[
+                    alt.Tooltip(
+                        "면적대:N",
+                        title="면적대"
                     ),
-                    y=alt.Y(
+                    alt.Tooltip(
                         "중앙월세:Q",
-                        title="환산월세 중앙값 (만원)"
+                        title="중앙 환산월세",
+                        format=".1f"
                     ),
-                    tooltip=[
-                        alt.Tooltip(
-                            "면적대:O",
-                            title="면적대"
-                        ),
-                        alt.Tooltip(
-                            "중앙월세:Q",
-                            title="중앙 환산월세",
-                            format=".1f"
-                        ),
-                        alt.Tooltip(
-                            "평균월세:Q",
-                            title="평균 환산월세",
-                            format=".1f"
-                        ),
-                        alt.Tooltip(
-                            "거래건수:Q",
-                            title="거래건수",
-                            format=","
-                        )
-                    ]
-                )
+                    alt.Tooltip(
+                        "평균월세:Q",
+                        title="평균 환산월세",
+                        format=".1f"
+                    ),
+                    alt.Tooltip(
+                        "거래건수:Q",
+                        title="거래건수",
+                        format=","
+                    )
+                ]
             )
+        )
 
-            st.altair_chart(
-                area_chart,
-                use_container_width=True
-            )
+        st.altair_chart(
+            area_chart,
+            use_container_width=True
+        )
 
 else:
     st.info(
