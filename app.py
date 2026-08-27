@@ -94,10 +94,28 @@ def load_subway():
 
 @st.cache_data(show_spinner=False)
 def load_subway_buffer():
+
     gdf = gpd.read_file(
         DATA_DIR / "subway_500m_buffer.geojson"
     )
-    return gdf.to_crs(epsg=4326)
+
+    gdf = gdf.to_crs(
+        epsg=4326
+    )
+
+    # Polygon을 경계선으로 변환
+    # → 지도 전체가 색으로 채워지는 문제 방지
+    gdf["geometry"] = (
+        gdf.geometry.boundary
+    )
+
+    gdf["station_id"] = (
+        gdf["station_id"]
+        .astype(str)
+        .str.strip()
+    )
+
+    return gdf
 
 
 @st.cache_data(show_spinner=False)
@@ -277,12 +295,6 @@ st.session_state.setdefault(
     "청년 1순위"
 )
 
-st.session_state.setdefault(
-    "subway_buffer_widget",
-    False
-)
-
-
 # ============================================================
 # 7. 프리셋
 # ============================================================
@@ -369,7 +381,6 @@ def reset_filters():
     st.session_state["count_label_widget"] = False
     st.session_state["show_policy_widget"] = True
     st.session_state["policy_priority_widget"] = "청년 1순위"
-    st.session_state["subway_buffer_widget"] = False
     st.session_state["preset_run"] = False
 
 
@@ -486,15 +497,6 @@ with st.sidebar.form(
     show_count_labels = st.checkbox(
         "법정동 거래건수 지도에 표시",
         key="count_label_widget"
-    )
-
-    show_subway_buffer = st.checkbox(
-        "지하철 500m 역세권 표시",
-        key="subway_buffer_widget",
-        help=(
-            "지하철역별 지도에서만 표시됩니다. "
-            "문제 확인을 위해 기본값은 꺼두었습니다."
-        )
     )
 
     st.markdown(
@@ -2600,11 +2602,15 @@ if run_search:
         rent_station = (
             load_rent_station()
         )
-
+        
         subway = (
             load_subway()
         )
-
+        
+        subway_buffer = (
+            load_subway_buffer()
+        )
+        
         gu = load_gu()
 
         # 타입 통일
@@ -2710,7 +2716,39 @@ if run_search:
                 "거래건수"
             ] >= MIN_MAP_COUNT
         ].copy()
-
+        
+        # ========================================================
+        # 지도에 표시되는 역의 500m 버퍼만 추출
+        # ========================================================
+        
+        station_map[
+            "station_id"
+        ] = (
+            station_map[
+                "station_id"
+            ]
+            .astype(str)
+            .str.strip()
+        )
+        
+        visible_station_ids = set(
+            station_map[
+                "station_id"
+            ]
+            .dropna()
+            .tolist()
+        )
+        
+        buffer_map = (
+            subway_buffer[
+                subway_buffer[
+                    "station_id"
+                ].isin(
+                    visible_station_ids
+                )
+            ]
+            .copy()
+        )
 
         if station_map.empty:
 
@@ -2859,11 +2897,44 @@ if run_search:
             auto_highlight=True
         )
 
+        # ========================================================
+        # 지하철역 500m 버퍼 경계
+        # ========================================================
+        
+        buffer_layer = None
+        
+        if not buffer_map.empty:
+        
+            buffer_layer = pdk.Layer(
+                "GeoJsonLayer",
+                data=buffer_map,
+        
+                # geometry 자체가 이미 LineString
+                filled=False,
+                stroked=True,
+        
+                # 너무 튀지 않는 회색
+                get_line_color=[
+                    90,
+                    100,
+                    115,
+                    100
+                ],
+        
+                line_width_min_pixels=1,
+                line_width_max_pixels=2,
+        
+                pickable=False
+            )
 
         layers = [
             gu_layer
         ]
-
+        
+        if buffer_layer is not None:
+            layers.append(
+                buffer_layer
+            )
 
         # -----------------------------------------------
         # 500m 버퍼
@@ -2974,8 +3045,8 @@ if run_search:
             )
 
             st.caption(
-                f"지도는 {line_text} 역의 "
-                f"500m 역세권 기준입니다. "
+                f"지도는 {line_text}의 역별 평균 환산월세와 "
+                f"500m 역세권 범위를 표시합니다. "
                 f"색상은 평균 환산월세의 5-95분위"
                 f"({vmin:.1f}-{vmax:.1f}만원), "
                 f"원의 크기는 거래건수를 나타냅니다."
@@ -2984,8 +3055,8 @@ if run_search:
         else:
 
             st.caption(
-                "지도는 서울 지하철역의 "
-                "500m 역세권 기준입니다. "
+                "지도는 서울 지하철역별 평균 환산월세와 "
+                "500m 역세권 범위를 표시합니다. "
                 f"색상은 평균 환산월세의 5-95분위"
                 f"({vmin:.1f}-{vmax:.1f}만원), "
                 "원의 크기는 거래건수를 나타냅니다."
