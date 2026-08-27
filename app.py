@@ -1924,7 +1924,9 @@ def prepare_policy_data(
 
 
 # ------------------------------------------------------------
-# LH 청년매입임대 사각형 마커
+# LH 청년매입임대 정사각형 마커
+# - 화면 확대/축소와 관계없이 픽셀 크기 유지
+# - 공급호수가 많을수록 조금 크게 표시
 # ------------------------------------------------------------
 
 def make_policy_layer(
@@ -1939,72 +1941,87 @@ def make_policy_layer(
     )
 
     # --------------------------------------------------------
-    # 각 LH 건물 위치 주변에 작은 사각형 Polygon 생성
+    # 공급호수에 따른 마커 크기
     #
-    # 약 20-25m 정도 크기의 사각형
-    # 지도 확대/축소 시에도 위치 식별용으로 충분한 크기
+    # sqrt를 사용해서 공급호수가 많아져도
+    # 마커 크기가 지나치게 커지지 않도록 함
     # --------------------------------------------------------
 
-    square_size = 0.001
-
-    def make_square(row):
-
-        lon = row["longitude"]
-        lat = row["latitude"]
-
-        return [
-            [
-                lon - square_size,
-                lat - square_size
-            ],
-            [
-                lon + square_size,
-                lat - square_size
-            ],
-            [
-                lon + square_size,
-                lat + square_size
-            ],
-            [
-                lon - square_size,
-                lat + square_size
-            ]
-        ]
-
     policy_marker[
-        "polygon"
-    ] = policy_marker.apply(
-        make_square,
-        axis=1
+        "marker_size"
+    ] = (
+        10
+        +
+        np.sqrt(
+            policy_marker[
+                "조건공급호수"
+            ]
+        )
+        * 3
+    ).clip(
+        lower=12,
+        upper=26
     )
 
+
+    # --------------------------------------------------------
+    # 1×1 흰색 PNG
+    #
+    # 이 이미지를 IconLayer에서 정사각형 아이콘으로 사용하고
+    # mask=True를 통해 보라색으로 칠함
+    # --------------------------------------------------------
+
+    square_icon = {
+        "url": (
+            "data:image/png;base64,"
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+            "CAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ"
+            "DwAFgQIAWkL7WQAAAABJRU5ErkJggg=="
+        ),
+        "width": 1,
+        "height": 1,
+        "anchorX": 0.5,
+        "anchorY": 0.5,
+        "mask": True
+    }
+
+
+    policy_marker[
+        "icon_data"
+    ] = [
+        square_icon
+        for _ in range(
+            len(policy_marker)
+        )
+    ]
+
+
     return pdk.Layer(
-        "PolygonLayer",
+        "IconLayer",
 
         data=policy_marker,
 
-        get_polygon="polygon",
+        get_position=[
+            "longitude",
+            "latitude"
+        ],
+
+        get_icon="icon_data",
+
+        # 공급호수에 따른 크기
+        get_size="marker_size",
+
+        # 중요:
+        # 실제 거리(m)가 아니라 화면 픽셀 기준
+        size_units="pixels",
 
         # 보라색
-        get_fill_color=[
+        get_color=[
             105,
             70,
             180,
-            235
+            245
         ],
-
-        # 흰색 외곽선
-        get_line_color=[
-            255,
-            255,
-            255,
-            240
-        ],
-
-        filled=True,
-        stroked=True,
-
-        line_width_min_pixels=1.5,
 
         pickable=True,
         auto_highlight=True
