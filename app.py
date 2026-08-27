@@ -1936,58 +1936,38 @@ def make_policy_layer(
         policy_map.copy()
     )
 
-    # --------------------------------------------------------
-    # 각 LH 건물 위치 주변에 작은 사각형 Polygon 생성
-    #
-    # 약 20-25m 정도 크기의 사각형
-    # 지도 확대/축소 시에도 위치 식별용으로 충분한 크기
-    # --------------------------------------------------------
-
-    square_size = 0.001
-
-    def make_square(row):
-
-        lon = row["longitude"]
-        lat = row["latitude"]
-
-        return [
-            [
-                lon - square_size,
-                lat - square_size
-            ],
-            [
-                lon + square_size,
-                lat - square_size
-            ],
-            [
-                lon + square_size,
-                lat + square_size
-            ],
-            [
-                lon - square_size,
-                lat + square_size
-            ]
-        ]
-
+    # 공급호수가 많을수록 조금 크게 표시
     policy_marker[
-        "polygon"
-    ] = policy_marker.apply(
-        make_square,
-        axis=1
+        "radius"
+    ] = (
+        100
+        +
+        np.sqrt(
+            policy_marker[
+                "조건공급호수"
+            ]
+        )
+        * 25
+    ).clip(
+        lower=120,
+        upper=320
     )
 
     return pdk.Layer(
-        "PolygonLayer",
+        "ScatterplotLayer",
 
         data=policy_marker,
 
-        get_polygon="polygon",
+        get_position=[
+            "longitude",
+            "latitude"
+        ],
 
-        # 보라색
+        # 진한 회색
         get_fill_color=[
-            105,
-            70,
-            180,
+            65,
+            65,
+            65,
             235
         ],
 
@@ -1996,12 +1976,15 @@ def make_policy_layer(
             255,
             255,
             255,
-            240
+            230
         ],
 
-        filled=True,
-        stroked=True,
+        get_radius="radius",
 
+        radius_min_pixels=6,
+        radius_max_pixels=14,
+
+        stroked=True,
         line_width_min_pixels=1.5,
 
         pickable=True,
