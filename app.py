@@ -1028,6 +1028,32 @@ def add_map_color(
         vmax
     )
 
+# ============================================================
+# 서울 자치구 경계
+# ============================================================
+
+def make_gu_layer(gu):
+
+    return pdk.Layer(
+        "GeoJsonLayer",
+        data=gu,
+
+        filled=False,
+        stroked=True,
+
+        # 진한 회색
+        get_line_color=[
+            60,
+            60,
+            60,
+            155
+        ],
+
+        line_width_min_pixels=1.2,
+        line_width_max_pixels=2.0,
+
+        pickable=False
+    )
 
 # ============================================================
 # 13. 법정동 거래건수 라벨
@@ -1995,20 +2021,20 @@ def make_policy_layer(
             "latitude"
         ],
 
-        # 진한 회색
+        # LH: 연한 회색
         get_fill_color=[
-            65,
-            65,
-            65,
-            235
+            220,
+            224,
+            228,
+            245
         ],
 
-        # 흰색 외곽선
+        # 분명하게 구분되는 진한 테두리
         get_line_color=[
-            255,
-            255,
-            255,
-            230
+            55,
+            55,
+            55,
+            235
         ],
 
         get_radius="radius",
@@ -2017,6 +2043,8 @@ def make_policy_layer(
         radius_max_pixels=14,
 
         stroked=True,
+
+        # 테두리가 있어야 월세 지도 위에서도 식별 가능
         line_width_min_pixels=1.5,
 
         pickable=True,
@@ -2226,6 +2254,11 @@ if run_search:
     if spatial_unit == "법정동별":
 
         dong = load_dong()
+        gu = load_gu()
+    
+        gu_layer = make_gu_layer(
+            gu
+        )
 
         df[
             "자치구코드"
@@ -2403,6 +2436,7 @@ if run_search:
 
         layers = [
             dong_layer
+            gu_layer
         ]
 
         if policy_layer is not None:
@@ -3179,26 +3213,8 @@ if run_search:
         # 서울 자치구 경계
         # ----------------------------------------------------
         
-        gu_layer = pdk.Layer(
-            "GeoJsonLayer",
-            data=gu,
-        
-            filled=False,
-            stroked=True,
-        
-            # 진한 회색, 적당한 투명도
-            get_line_color=[
-                65,
-                65,
-                65,
-                145
-            ],
-        
-            # 기존보다 조금 두껍게
-            line_width_min_pixels=1.2,
-            line_width_max_pixels=2.0,
-        
-            pickable=False
+        gu_layer = make_gu_layer(
+            gu
         )
 
 
