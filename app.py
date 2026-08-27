@@ -1113,6 +1113,139 @@ def make_dong_label_data(
         ]
     )
 
+# ============================================================
+# 자치구 이름 라벨
+# ============================================================
+
+def make_gu_label_data(gu):
+
+    gu_label = (
+        gu.copy()
+        .to_crs(epsg=5179)
+    )
+
+    # 각 자치구 내부의 안정적인 표시점
+    gu_label["geometry"] = (
+        gu_label.geometry.representative_point()
+    )
+
+    gu_label = (
+        gu_label
+        .to_crs(epsg=4326)
+    )
+
+    gu_label["longitude"] = (
+        gu_label.geometry.x
+    )
+
+    gu_label["latitude"] = (
+        gu_label.geometry.y
+    )
+
+    # seoul_gu.geojson의 구 이름 필드에 맞춰 선택
+    # 보통 SIG_KOR_NM을 사용
+    gu_label["label"] = (
+        gu_label["SIG_KOR_NM"]
+        .astype(str)
+    )
+
+    return pd.DataFrame(
+        gu_label[
+            [
+                "label",
+                "longitude",
+                "latitude"
+            ]
+        ]
+    )
+
+# ============================================================
+# 자치구 배경 레이어
+# ============================================================
+
+def make_gu_background_layers(gu):
+
+    # 자치구 경계
+    gu_boundary_layer = pdk.Layer(
+        "GeoJsonLayer",
+        data=gu,
+
+        filled=False,
+        stroked=True,
+
+        get_line_color=[
+            80,
+            80,
+            80,
+            65
+        ],
+
+        line_width_min_pixels=0.7,
+        line_width_max_pixels=1.2,
+
+        pickable=False
+    )
+
+
+    # 자치구 이름
+    gu_label_data = (
+        make_gu_label_data(
+            gu
+        )
+    )
+
+    # 한글을 TextLayer 문자셋에 명시적으로 포함
+    korean_characters = sorted(
+        set(
+            "".join(
+                gu_label_data[
+                    "label"
+                ].astype(str)
+            )
+        )
+    )
+
+    gu_text_layer = pdk.Layer(
+        "TextLayer",
+
+        data=gu_label_data,
+
+        get_position=[
+            "longitude",
+            "latitude"
+        ],
+
+        get_text="label",
+
+        # 너무 강조되지 않게
+        get_size=11,
+
+        get_color=[
+            80,
+            80,
+            80,
+            115
+        ],
+
+        get_text_anchor='"middle"',
+        get_alignment_baseline='"center"',
+
+        # 한글 표시를 위해 중요
+        character_set=korean_characters,
+
+        font_family=(
+            "'Noto Sans KR', "
+            "'Malgun Gothic', "
+            "sans-serif"
+        ),
+
+        pickable=False
+    )
+
+    return (
+        gu_boundary_layer,
+        gu_text_layer
+    )
 
 # ============================================================
 # 14. 보증금 수준별 월세 통계
@@ -2226,6 +2359,14 @@ if run_search:
     if spatial_unit == "법정동별":
 
         dong = load_dong()
+        gu = load_gu()
+    
+        (
+            gu_boundary_layer,
+            gu_text_layer
+        ) = make_gu_background_layers(
+            gu
+        )
 
         df[
             "자치구코드"
@@ -2402,7 +2543,9 @@ if run_search:
         )
 
         layers = [
-            dong_layer
+            gu_boundary_layer,
+            dong_layer,
+            gu_text_layer
         ]
 
         if policy_layer is not None:
@@ -2527,6 +2670,17 @@ if run_search:
 
         grid = load_grid()
 
+
+        gu = load_gu()
+    
+        (
+            gu_boundary_layer,
+            gu_text_layer
+        ) = make_gu_background_layers(
+            gu
+        )
+
+        
         grid_df = df[
             df[
                 "grid_id"
@@ -2692,7 +2846,9 @@ if run_search:
         )
 
         layers = [
-            grid_layer
+            gu_boundary_layer,
+            grid_layer,
+            gu_text_layer
         ]
 
         if policy_layer is not None:
@@ -2780,6 +2936,17 @@ if run_search:
         )
 
         gu = load_gu()
+
+         # ----------------------------------------------------
+        # 자치구 경계 + 자치구명
+        # ----------------------------------------------------
+    
+        (
+            gu_boundary_layer,
+            gu_text_layer
+        ) = make_gu_background_layers(
+            gu
+        )
 
 
         # ----------------------------------------------------
@@ -3174,27 +3341,6 @@ if run_search:
             )
         )
 
-
-        # ----------------------------------------------------
-        # 서울 자치구 경계
-        # ----------------------------------------------------
-
-        gu_layer = pdk.Layer(
-            "GeoJsonLayer",
-            data=gu,
-            filled=False,
-            stroked=True,
-            get_line_color=[
-                80,
-                80,
-                80,
-                80
-            ],
-            line_width_min_pixels=0.7,
-            pickable=False
-        )
-
-
         # ----------------------------------------------------
         # 역 마커
         # ----------------------------------------------------
@@ -3228,9 +3374,8 @@ if run_search:
         # ----------------------------------------------------
 
         layers = [
-            gu_layer
+            gu_boundary_layer
         ]
-
 
         # 500m 버퍼 자동 표시
         if (
@@ -3262,6 +3407,11 @@ if run_search:
             layers.append(
                 buffer_layer
             )
+            # 자치구 이름
+            layers.append(
+                gu_text_layer
+            )
+    
 
 
         # 역 마커는 버퍼 위
