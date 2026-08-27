@@ -2023,18 +2023,17 @@ def make_policy_layer(
 
         # LH: 연한 회색
         get_fill_color=[
-            220,
-            224,
-            228,
-            245
-        ],
-
-        # 분명하게 구분되는 진한 테두리
-        get_line_color=[
-            55,
-            55,
-            55,
+            65,
+            65,
+            65,
             235
+        ],
+        
+        get_line_color=[
+            255,
+            255,
+            255,
+            230
         ],
 
         get_radius="radius",
