@@ -1211,48 +1211,45 @@ def make_gu_background_layers(gu):
 
     gu_text_layer = pdk.Layer(
         "TextLayer",
-
+    
         data=gu_label_data,
-
+    
         get_position=[
             "longitude",
             "latitude"
         ],
-
+    
         get_text="label",
-
-        # 조금 크게 테스트
+    
         get_size=13,
-
-        # 회색 + 충분한 투명도
+    
         get_color=[
             65,
             65,
             65,
-            180
+            170
         ],
-
+    
         get_text_anchor='"middle"',
         get_alignment_baseline='"center"',
-
-        # 확대·축소해도 읽을 수 있도록
+    
         size_units="pixels",
         size_min_pixels=11,
         size_max_pixels=15,
-
-        # 한글 문자 자동 인식
+    
+        # 핵심
         character_set="auto",
-
-        # 한국어 지원 폰트 우선
-        font_family="Malgun Gothic",
-
-        font_weight=600,
-
+    
+        # 특정 한글 폰트를 강제로 지정하지 않음
+        # 브라우저가 한글 지원 폰트를 자동 선택
+        font_family="sans-serif",
+    
+        font_weight="bold",
+    
         billboard=True,
-
+    
         pickable=False
     )
-
 
     return (
         gu_boundary_layer,
@@ -2958,16 +2955,6 @@ if run_search:
         ) = make_gu_background_layers(
             gu
         )
-
-        gu_label_test = make_gu_label_data(
-            gu
-        )
-        
-        st.write(
-            gu_label_test.head()
-        )
-
-        
 
         # ----------------------------------------------------
         # station_id 자료형 통일
