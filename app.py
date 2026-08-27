@@ -1924,7 +1924,7 @@ def prepare_policy_data(
 
 
 # ------------------------------------------------------------
-# LH 청년매입임대 네모 마커
+# LH 청년매입임대 사각형 마커
 # ------------------------------------------------------------
 
 def make_policy_layer(
@@ -1938,53 +1938,77 @@ def make_policy_layer(
         policy_map.copy()
     )
 
-    policy_marker[
-        "marker"
-    ] = "■"
+    # --------------------------------------------------------
+    # 각 LH 건물 위치 주변에 작은 사각형 Polygon 생성
+    #
+    # 약 20-25m 정도 크기의 사각형
+    # 지도 확대/축소 시에도 위치 식별용으로 충분한 크기
+    # --------------------------------------------------------
+
+    square_size = 0.00012
+
+    def make_square(row):
+
+        lon = row["longitude"]
+        lat = row["latitude"]
+
+        return [
+            [
+                lon - square_size,
+                lat - square_size
+            ],
+            [
+                lon + square_size,
+                lat - square_size
+            ],
+            [
+                lon + square_size,
+                lat + square_size
+            ],
+            [
+                lon - square_size,
+                lat + square_size
+            ]
+        ]
 
     policy_marker[
-        "marker_size"
-    ] = (
-        15
-        +
-        np.sqrt(
-            policy_marker[
-                "조건공급호수"
-            ]
-        )
-        * 2
-    ).clip(
-        lower=16,
-        upper=27
+        "polygon"
+    ] = policy_marker.apply(
+        make_square,
+        axis=1
     )
 
     return pdk.Layer(
-        "TextLayer",
+        "PolygonLayer",
+
         data=policy_marker,
 
-        get_position=[
-            "longitude",
-            "latitude"
-        ],
+        get_polygon="polygon",
 
-        get_text="marker",
-
-        get_size="marker_size",
-
-        get_color=[
+        # 보라색
+        get_fill_color=[
             105,
             70,
             180,
-            245
+            235
         ],
 
-        get_text_anchor='"middle"',
+        # 흰색 외곽선
+        get_line_color=[
+            255,
+            255,
+            255,
+            240
+        ],
 
-        get_alignment_baseline='"center"',
+        filled=True,
+        stroked=True,
 
-        pickable=True
+        line_width_min_pixels=1.5,
+
+        pickable=True,
+        auto_highlight=True
     )
-
 
 # ============================================================
 # 18. 지도 툴팁 및 기본 View
