@@ -3388,7 +3388,11 @@ if run_search:
             gu_boundary_layer
         ]
 
-        # 500m 버퍼 자동 표시
+
+        # ----------------------------------------------------
+        # 500m 버퍼
+        # ----------------------------------------------------
+
         if (
             buffer_map is not None
             and not buffer_map.empty
@@ -3398,7 +3402,6 @@ if run_search:
                 "GeoJsonLayer",
                 data=buffer_map,
 
-                # geometry 자체가 LineString
                 filled=False,
                 stroked=True,
 
@@ -3418,27 +3421,36 @@ if run_search:
             layers.append(
                 buffer_layer
             )
-            # 자치구 이름
-            layers.append(
-                gu_text_layer
-            )
-    
 
 
-        # 역 마커는 버퍼 위
+        # ----------------------------------------------------
+        # 자치구 이름
+        # 버퍼 존재 여부와 관계없이 항상 표시
+        # ----------------------------------------------------
+
+        layers.append(
+            gu_text_layer
+        )
+
+
+        # ----------------------------------------------------
+        # 역 마커
+        # ----------------------------------------------------
+
         layers.append(
             station_layer
         )
 
 
-        # LH는 가장 위
+        # ----------------------------------------------------
+        # LH 청년매입임대
+        # ----------------------------------------------------
+
         if policy_layer is not None:
 
             layers.append(
                 policy_layer
             )
-
-
         deck = pdk.Deck(
             layers=layers,
             initial_view_state=SEOUL_VIEW,
