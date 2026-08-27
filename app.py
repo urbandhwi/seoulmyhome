@@ -1921,52 +1921,92 @@ def prepare_policy_data(
         units,
         policy_map
     )
+# ------------------------------------------------------------
+# LH 청년매입임대 사각형 마커
+# ------------------------------------------------------------
 
+def make_policy_layer(
+    policy_map
+):
 
-def make_square(row):
+    if policy_map.empty:
+        return None
 
-    lon = row["longitude"]
-    lat = row["latitude"]
-
-    # 중심에서 각 방향으로 12m
-    # → 전체 약 24m × 24m 사각형
-    half_size_m = 12
-
-    # 위도 1도당 약 111.32km
-    lat_delta = (
-        half_size_m
-        / 111320
+    policy_marker = (
+        policy_map.copy()
     )
 
-    # 경도는 위도에 따라 실제 거리가 달라짐
-    lon_delta = (
-        half_size_m
-        / (
-            111320
-            * np.cos(
-                np.radians(lat)
-            )
-        )
-    )
+    # --------------------------------------------------------
+    # 각 LH 건물 위치 주변에 작은 사각형 Polygon 생성
+    #
+    # 약 20-25m 정도 크기의 사각형
+    # 지도 확대/축소 시에도 위치 식별용으로 충분한 크기
+    # --------------------------------------------------------
 
-    return [
-        [
-            lon - lon_delta,
-            lat - lat_delta
-        ],
-        [
-            lon + lon_delta,
-            lat - lat_delta
-        ],
-        [
-            lon + lon_delta,
-            lat + lat_delta
-        ],
-        [
-            lon - lon_delta,
-            lat + lat_delta
+    square_size = 0.001
+
+    def make_square(row):
+
+        lon = row["longitude"]
+        lat = row["latitude"]
+
+        return [
+            [
+                lon - square_size,
+                lat - square_size
+            ],
+            [
+                lon + square_size,
+                lat - square_size
+            ],
+            [
+                lon + square_size,
+                lat + square_size
+            ],
+            [
+                lon - square_size,
+                lat + square_size
+            ]
         ]
-    ]
+
+    policy_marker[
+        "polygon"
+    ] = policy_marker.apply(
+        make_square,
+        axis=1
+    )
+
+    return pdk.Layer(
+        "PolygonLayer",
+
+        data=policy_marker,
+
+        get_polygon="polygon",
+
+        # 보라색
+        get_fill_color=[
+            105,
+            70,
+            180,
+            235
+        ],
+
+        # 흰색 외곽선
+        get_line_color=[
+            255,
+            255,
+            255,
+            240
+        ],
+
+        filled=True,
+        stroked=True,
+
+        line_width_min_pixels=1.5,
+
+        pickable=True,
+        auto_highlight=True
+    )
 
 # ============================================================
 # 18. 지도 툴팁 및 기본 View
