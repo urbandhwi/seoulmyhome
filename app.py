@@ -46,7 +46,7 @@ st.sidebar.caption(
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
-
+ASSET_DIR = BASE_DIR / "assets"
 
 # ============================================================
 # 3. 데이터 로드
@@ -120,6 +120,27 @@ def load_policy_buildings():
         DATA_DIR / "policy_housing_buildings.parquet"
     )
 
+# ============================================================
+# 평수별 원룸 크기 안내
+# ============================================================
+
+@st.dialog(
+    "📐 평수별 원룸 크기 체감",
+    width="large"
+)
+def show_size_guide():
+
+    st.caption(
+        "평수에 따른 원룸의 공간감을 참고할 수 있는 자료입니다. "
+        "아래로 스크롤해서 확인해 주세요."
+    )
+
+    st.image(
+        ASSET_DIR / "sizeguide.jpg",
+        width="stretch"
+    )
+    st.caption(
+    "자료: https://theqoo.net/square/1722053569"
 
 # ============================================================
 # 4. 기본 설정
@@ -583,6 +604,16 @@ with st.sidebar.form(
             use_container_width=True
         )
     )
+
+# ============================================================
+# 평수별 원룸 크기 팁
+# ============================================================
+
+if st.sidebar.button(
+    "💡 평수별 원룸 크기 체감하기",
+    use_container_width=True
+):
+    show_size_guide()
 
 
 # ============================================================
