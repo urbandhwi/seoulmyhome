@@ -2959,6 +2959,15 @@ if run_search:
             gu
         )
 
+        gu_label_test = make_gu_label_data(
+            gu
+        )
+        
+        st.write(
+            gu_label_test.head()
+        )
+
+        
 
         # ----------------------------------------------------
         # station_id 자료형 통일
