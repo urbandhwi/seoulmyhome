@@ -136,7 +136,34 @@ all_subway_lines = sorted({
     for text in subway_reference["hoseon"].dropna()
     for line in str(text).split(",")
 })
+# ============================================================
+# 지하철 노선별 대표 색상
+# ============================================================
 
+LINE_COLOR_MAP = {
+    "1호선": "#0052A4",
+    "2호선": "#00A84D",
+    "3호선": "#EF7C1C",
+    "4호선": "#00A5DE",
+    "5호선": "#996CAC",
+    "6호선": "#CD7C2F",
+    "7호선": "#747F00",
+    "8호선": "#E6186C",
+    "9호선": "#BDB092",
+
+    "공항철도": "#0090D2",
+    "경의중앙선": "#77C4A3",
+    "경춘선": "#0C8E72",
+    "수인분당선": "#F5A200",
+    "신분당선": "#D4003B",
+
+    "우이신설선": "#B7C452",
+    "신림선": "#6789CA",
+    "서해선": "#8FC31F",
+
+    "김포골드라인": "#AD8605",
+    "에버라인": "#56AD2D"
+}
 
 # ============================================================
 # 5. 기준 보증금
@@ -212,25 +239,27 @@ st.session_state.setdefault(
     2025
 )
 
-# 다중 선택
 st.session_state.setdefault(
     "deposit_widget",
     ["1,000만원"]
 )
 
+# 기본 면적 15-40㎡
 st.session_state.setdefault(
     "area_widget",
-    (15, 30)
+    (15, 40)
 )
 
+# 건물연식 전체
 st.session_state.setdefault(
     "age_widget",
     (0, 100)
 )
 
+# 층수 전체
 st.session_state.setdefault(
     "floor_widget",
-    "지하·반지하 제외"
+    "전체"
 )
 
 st.session_state.setdefault(
@@ -248,7 +277,6 @@ st.session_state.setdefault(
     "청년 1순위"
 )
 
-# 버퍼는 우선 기본 OFF
 st.session_state.setdefault(
     "subway_buffer_widget",
     False
@@ -314,57 +342,35 @@ def apply_preset(
 
 def reset_filters():
 
-    st.session_state[
-        "house_type_widget"
-    ] = "전체"
+    st.session_state["house_type_widget"] = "전체"
+    st.session_state["spatial_unit_widget"] = "법정동별"
+    st.session_state["subway_lines_widget"] = []
 
-    st.session_state[
-        "spatial_unit_widget"
-    ] = "법정동별"
+    st.session_state["year_widget"] = 2025
 
-    st.session_state[
-        "subway_lines_widget"
-    ] = []
+    st.session_state["deposit_widget"] = [
+        "1,000만원"
+    ]
 
-    st.session_state[
-        "year_widget"
-    ] = 2025
+    st.session_state["area_widget"] = (
+        15,
+        40
+    )
 
-    st.session_state[
-        "deposit_widget"
-    ] = ["1,000만원"]
+    st.session_state["age_widget"] = (
+        0,
+        100
+    )
 
-    st.session_state[
-        "area_widget"
-    ] = (15, 30)
+    st.session_state["floor_widget"] = (
+        "전체"
+    )
 
-    st.session_state[
-        "age_widget"
-    ] = (0, 100)
-
-    st.session_state[
-        "floor_widget"
-    ] = "지하·반지하 제외"
-
-    st.session_state[
-        "count_label_widget"
-    ] = False
-
-    st.session_state[
-        "show_policy_widget"
-    ] = True
-
-    st.session_state[
-        "policy_priority_widget"
-    ] = "청년 1순위"
-
-    st.session_state[
-        "subway_buffer_widget"
-    ] = False
-
-    st.session_state[
-        "preset_run"
-    ] = False
+    st.session_state["count_label_widget"] = False
+    st.session_state["show_policy_widget"] = True
+    st.session_state["policy_priority_widget"] = "청년 1순위"
+    st.session_state["subway_buffer_widget"] = False
+    st.session_state["preset_run"] = False
 
 
 # ============================================================
@@ -1667,34 +1673,57 @@ def make_policy_layer(
     if policy_map.empty:
         return None
 
+    policy_marker = (
+        policy_map.copy()
+    )
+
+    # 네모 마커
+    policy_marker[
+        "marker"
+    ] = "■"
+
+    # 공급호수에 따라 약간 크기 차이
+    policy_marker[
+        "marker_size"
+    ] = (
+        15
+        +
+        np.sqrt(
+            policy_marker[
+                "조건공급호수"
+            ]
+        )
+        * 2
+    ).clip(
+        lower=16,
+        upper=27
+    )
+
     return pdk.Layer(
-        "ScatterplotLayer",
-        data=policy_map,
+        "TextLayer",
+        data=policy_marker,
+
         get_position=[
             "longitude",
             "latitude"
         ],
-        get_fill_color=[
-            106,
-            76,
-            180,
-            235
-        ],
-        get_line_color=[
-            255,
-            255,
-            255,
-            240
-        ],
-        get_radius="radius",
-        radius_min_pixels=7,
-        radius_max_pixels=16,
-        stroked=True,
-        line_width_min_pixels=2,
-        pickable=True,
-        auto_highlight=True
-    )
 
+        get_text="marker",
+
+        get_size="marker_size",
+
+        get_color=[
+            105,
+            70,
+            180,
+            245
+        ],
+
+        get_text_anchor='"middle"',
+        get_alignment_baseline='"center"',
+
+        pickable=True
+    )
 
 # ============================================================
 # 18. 노선별 통계
@@ -3030,38 +3059,83 @@ if run_search:
 
         if not line_stats.empty:
 
+            line_stats = (
+                line_stats.copy()
+            )
+            
+            line_stats[
+                "노선색"
+            ] = (
+                line_stats[
+                    "노선"
+                ]
+                .map(
+                    LINE_COLOR_MAP
+                )
+                .fillna(
+                    "#808080"
+                )
+            )
+            
+            # 현재 존재하는 노선만 domain/range 생성
+            line_color_domain = (
+                line_stats[
+                    "노선"
+                ].tolist()
+            )
+            
+            line_color_range = (
+                line_stats[
+                    "노선색"
+                ].tolist()
+            )
+            
+            
             line_chart = (
                 alt.Chart(
                     line_stats
                 )
                 .mark_bar()
                 .encode(
+            
                     x=alt.X(
                         "평균환산월세:Q",
-                        title=(
-                            "평균 환산월세 (만원)"
-                        )
+                        title="평균 환산월세 (만원)"
                     ),
+            
                     y=alt.Y(
                         "노선:N",
                         sort="-x",
                         title="노선"
                     ),
+            
+                    color=alt.Color(
+                        "노선:N",
+                        scale=alt.Scale(
+                            domain=line_color_domain,
+                            range=line_color_range
+                        ),
+                        legend=None
+                    ),
+            
                     tooltip=[
                         alt.Tooltip(
                             "노선:N",
                             title="노선"
                         ),
+            
                         alt.Tooltip(
                             "평균환산월세:Q",
-                            title="평균",
+                            title="평균 환산월세",
                             format=".1f"
                         ),
+            
                         alt.Tooltip(
                             "중앙환산월세:Q",
-                            title="중앙",
+                            title="중앙 환산월세",
                             format=".1f"
                         ),
+            
                         alt.Tooltip(
                             "거래건수:Q",
                             title="거래건수",
@@ -3070,7 +3144,7 @@ if run_search:
                     ]
                 )
             )
-
+            
             st.altair_chart(
                 line_chart,
                 use_container_width=True
