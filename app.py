@@ -14,7 +14,7 @@ from matplotlib.colors import Normalize
 # 0. BUILD
 # ============================================================
 
-BUILD_VERSION = "reset-20260827-01"
+APP_BUILD = "reset-20260827-02"
 
 
 # ============================================================
@@ -35,9 +35,8 @@ st.caption(
     "LH 청년매입임대 공급주택을 함께 살펴봅니다."
 )
 
-# 이게 안 보이면 다른 app.py가 실행 중인 것
 st.sidebar.caption(
-    f"build: {BUILD_VERSION}"
+    f"build: {APP_BUILD}"
 )
 
 
@@ -94,28 +93,11 @@ def load_subway():
 
 @st.cache_data(show_spinner=False)
 def load_subway_buffer():
-
     gdf = gpd.read_file(
         DATA_DIR / "subway_500m_buffer.geojson"
     )
 
-    gdf = gdf.to_crs(
-        epsg=4326
-    )
-
-    # Polygon을 경계선으로 변환
-    # → 지도 전체가 색으로 채워지는 문제 방지
-    gdf["geometry"] = (
-        gdf.geometry.boundary
-    )
-
-    gdf["station_id"] = (
-        gdf["station_id"]
-        .astype(str)
-        .str.strip()
-    )
-
-    return gdf
+    return gdf.to_crs(epsg=4326)
 
 
 @st.cache_data(show_spinner=False)
@@ -147,16 +129,9 @@ MIN_MAP_COUNT = 5
 MIN_DONG_LABEL_COUNT = 20
 
 
-subway_reference = load_subway()
-
-all_subway_lines = sorted({
-    line.strip()
-    for text in subway_reference["hoseon"].dropna()
-    for line in str(text).split(",")
-})
-# ============================================================
-# 지하철 노선별 대표 색상
-# ============================================================
+# ------------------------------------------------------------
+# 지하철 노선 대표 색상
+# ------------------------------------------------------------
 
 LINE_COLOR_MAP = {
     "1호선": "#0052A4",
@@ -170,9 +145,15 @@ LINE_COLOR_MAP = {
     "9호선": "#BDB092",
 
     "공항철도": "#0090D2",
+
     "경의중앙선": "#77C4A3",
+    "경의·중앙선": "#77C4A3",
+
     "경춘선": "#0C8E72",
+
     "수인분당선": "#F5A200",
+    "분당선": "#F5A200",
+
     "신분당선": "#D4003B",
 
     "우이신설선": "#B7C452",
@@ -180,12 +161,29 @@ LINE_COLOR_MAP = {
     "서해선": "#8FC31F",
 
     "김포골드라인": "#AD8605",
-    "에버라인": "#56AD2D"
+    "에버라인": "#56AD2D",
+
+    "인천1호선": "#7CA8D5",
+    "인천2호선": "#ED8B00"
 }
 
-# ============================================================
-# 5. 기준 보증금
-# ============================================================
+
+# ------------------------------------------------------------
+# 지하철 전체 노선 목록
+# ------------------------------------------------------------
+
+subway_reference = load_subway()
+
+all_subway_lines = sorted({
+    line.strip()
+    for text in subway_reference["hoseon"].dropna()
+    for line in str(text).split(",")
+})
+
+
+# ------------------------------------------------------------
+# 보증금 기준
+# ------------------------------------------------------------
 
 DEPOSIT_BASE_VALUES = [
     0,
@@ -204,6 +202,7 @@ DEPOSIT_BASE_VALUES = [
 
 
 def deposit_label(value):
+
     if value == 0:
         return "무보증"
 
@@ -218,15 +217,12 @@ DEPOSIT_OPTIONS = {
 
 def get_deposit_range(base_deposit):
 
-    # 무보증
     if base_deposit == 0:
         return 0, 1
 
-    # 500만원 대표 구간
     if base_deposit == 500:
         return 1, 1000
 
-    # 나머지
     return (
         base_deposit,
         base_deposit + 1000
@@ -234,7 +230,7 @@ def get_deposit_range(base_deposit):
 
 
 # ============================================================
-# 6. 위젯 기본값
+# 5. 기본 위젯값
 # ============================================================
 
 st.session_state.setdefault(
@@ -252,11 +248,13 @@ st.session_state.setdefault(
     []
 )
 
+# 기본 연도
 st.session_state.setdefault(
     "year_widget",
     2025
 )
 
+# 기본 보증금
 st.session_state.setdefault(
     "deposit_widget",
     ["1,000만원"]
@@ -268,13 +266,13 @@ st.session_state.setdefault(
     (15, 40)
 )
 
-# 건물연식 전체
+# 기본 건물연식 전체
 st.session_state.setdefault(
     "age_widget",
     (0, 100)
 )
 
-# 층수 전체
+# 기본 층수 전체
 st.session_state.setdefault(
     "floor_widget",
     "전체"
@@ -295,14 +293,32 @@ st.session_state.setdefault(
     "청년 1순위"
 )
 
+
+# 예전 단일 선택 세션이 남아 있을 경우
+# 다중 선택 형태로 자동 변환
+if isinstance(
+    st.session_state.get(
+        "deposit_widget"
+    ),
+    str
+):
+    st.session_state[
+        "deposit_widget"
+    ] = [
+        st.session_state[
+            "deposit_widget"
+        ]
+    ]
+
+
 # ============================================================
-# 7. 프리셋
+# 6. 프리셋
 # ============================================================
 
 def apply_preset(
-    deposits,
+    deposit,
     area,
-    age=(0, 100),
+    age,
     floor="지하·반지하 제외",
     house_type="전체"
 ):
@@ -325,7 +341,14 @@ def apply_preset(
 
     st.session_state[
         "deposit_widget"
-    ] = deposits
+    ] = (
+        deposit
+        if isinstance(
+            deposit,
+            list
+        )
+        else [deposit]
+    )
 
     st.session_state[
         "area_widget"
@@ -354,38 +377,65 @@ def apply_preset(
 
 def reset_filters():
 
-    st.session_state["house_type_widget"] = "전체"
-    st.session_state["spatial_unit_widget"] = "법정동별"
-    st.session_state["subway_lines_widget"] = []
+    st.session_state[
+        "house_type_widget"
+    ] = "전체"
 
-    st.session_state["year_widget"] = 2025
+    st.session_state[
+        "spatial_unit_widget"
+    ] = "법정동별"
 
-    st.session_state["deposit_widget"] = [
+    st.session_state[
+        "subway_lines_widget"
+    ] = []
+
+    st.session_state[
+        "year_widget"
+    ] = 2025
+
+    st.session_state[
+        "deposit_widget"
+    ] = [
         "1,000만원"
     ]
 
-    st.session_state["area_widget"] = (
+    st.session_state[
+        "area_widget"
+    ] = (
         15,
         40
     )
 
-    st.session_state["age_widget"] = (
+    st.session_state[
+        "age_widget"
+    ] = (
         0,
         100
     )
 
-    st.session_state["floor_widget"] = (
-        "전체"
-    )
+    st.session_state[
+        "floor_widget"
+    ] = "전체"
 
-    st.session_state["count_label_widget"] = False
-    st.session_state["show_policy_widget"] = True
-    st.session_state["policy_priority_widget"] = "청년 1순위"
-    st.session_state["preset_run"] = False
+    st.session_state[
+        "count_label_widget"
+    ] = False
+
+    st.session_state[
+        "show_policy_widget"
+    ] = True
+
+    st.session_state[
+        "policy_priority_widget"
+    ] = "청년 1순위"
+
+    st.session_state[
+        "preset_run"
+    ] = False
 
 
 # ============================================================
-# 8. 검색 조건
+# 7. 검색 조건
 # ============================================================
 
 with st.sidebar.form(
@@ -422,8 +472,9 @@ with st.sidebar.form(
             options=all_subway_lines,
             key="subway_lines_widget",
             help=(
-                "지하철역별 지도에만 적용됩니다. "
-                "선택하지 않으면 전체 역을 표시합니다."
+                "지하철역별 지도에 적용됩니다. "
+                "선택하지 않으면 전체 역을 표시합니다. "
+                "아래 노선별 비교에는 이 필터가 적용되지 않습니다."
             )
         )
     )
@@ -446,10 +497,10 @@ with st.sidebar.form(
             ),
             key="deposit_widget",
             help=(
-                "여러 기준을 동시에 선택할 수 있습니다. "
-                "예: 500·1,000·2,000만원 선택 시 "
-                "1-999만원은 500만원 기준, "
-                "1,000-1,999만원은 1,000만원 기준, "
+                "여러 보증금 기준을 함께 선택할 수 있습니다. "
+                "예를 들어 500·1,000·2,000만원을 선택하면 "
+                "1-999만원은 500만원, "
+                "1,000-1,999만원은 1,000만원, "
                 "2,000-2,999만원은 2,000만원 기준으로 "
                 "각각 환산합니다."
             )
@@ -479,8 +530,7 @@ with st.sidebar.form(
     )
 
     st.caption(
-        f"준공 후 {age_min}년 - "
-        f"{age_max}년 "
+        f"준공 후 {age_min}년 - {age_max}년 "
         f"(약 {selected_year - age_max}년 - "
         f"{selected_year - age_min}년 준공)"
     )
@@ -496,7 +546,11 @@ with st.sidebar.form(
 
     show_count_labels = st.checkbox(
         "법정동 거래건수 지도에 표시",
-        key="count_label_widget"
+        key="count_label_widget",
+        help=(
+            "법정동별 지도에서 일정 거래건수 이상의 "
+            "지역에 거래건수를 직접 표시합니다."
+        )
     )
 
     st.markdown(
@@ -505,7 +559,11 @@ with st.sidebar.form(
 
     show_policy = st.checkbox(
         "LH 청년매입임대 함께 보기",
-        key="show_policy_widget"
+        key="show_policy_widget",
+        help=(
+            "선택한 면적·층수·주택유형 조건에 맞는 "
+            "LH 청년매입임대 공급주택을 지도에 표시합니다."
+        )
     )
 
     policy_priority = st.selectbox(
@@ -528,7 +586,7 @@ with st.sidebar.form(
 
 
 # ============================================================
-# 9. 빠른 검색
+# 8. 빠른 검색
 # ============================================================
 
 st.sidebar.markdown(
@@ -536,8 +594,7 @@ st.sidebar.markdown(
 )
 
 st.sidebar.caption(
-    "자주 찾는 원룸 조건을 "
-    "한 번에 적용합니다."
+    "자주 찾는 조건을 한 번에 적용합니다."
 )
 
 
@@ -551,7 +608,7 @@ preset_col1.button(
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        ["1,000만원"],
+        "1,000만원",
         (16, 23),
         (0, 100)
     )
@@ -563,7 +620,7 @@ preset_col2.button(
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        ["1,000만원"],
+        "1,000만원",
         (26, 40),
         (0, 100)
     )
@@ -580,7 +637,7 @@ preset_col3.button(
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        ["1,000만원"],
+        "1,000만원",
         (26, 40),
         (0, 10)
     )
@@ -592,7 +649,7 @@ preset_col4.button(
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        ["2,000만원"],
+        "2,000만원",
         (26, 40),
         (0, 100)
     )
@@ -609,7 +666,7 @@ preset_col5.button(
     use_container_width=True,
     on_click=apply_preset,
     args=(
-        ["3,000만원"],
+        "3,000만원",
         (26, 40),
         (0, 100)
     )
@@ -633,7 +690,7 @@ run_search = (
 
 
 # ============================================================
-# 10. 민간 임대 공통 필터
+# 9. 민간 임대 공통 필터
 # ============================================================
 
 def filter_common_data(
@@ -646,7 +703,8 @@ def filter_common_data(
 ):
 
     df = df[
-        df["전월세구분"] == "월세"
+        df["전월세구분"]
+        == "월세"
     ].copy()
 
     if house_type != "전체":
@@ -683,31 +741,19 @@ def filter_common_data(
 
 
 # ============================================================
-# 11. 다중 보증금 환산
+# 10. 다중 보증금 환산
 # ============================================================
 
 def filter_rent_data(
     df,
-    selected_bases,
+    base_deposits,
     area_min,
     area_max
 ):
 
-    df = df[
-        (
-            df["임대면적"]
-            >= area_min
-        )
-        &
-        (
-            df["임대면적"]
-            <= area_max
-        )
-    ].copy()
+    parts = []
 
-    result_list = []
-
-    for base_deposit in selected_bases:
+    for base_deposit in base_deposits:
 
         dep_min, dep_max = (
             get_deposit_range(
@@ -715,7 +761,7 @@ def filter_rent_data(
             )
         )
 
-        temp = df[
+        part = df[
             (
                 df["보증금(만원)"]
                 >= dep_min
@@ -725,50 +771,111 @@ def filter_rent_data(
                 df["보증금(만원)"]
                 < dep_max
             )
+            &
+            (
+                df["임대면적"]
+                >= area_min
+            )
+            &
+            (
+                df["임대면적"]
+                <= area_max
+            )
         ].copy()
 
-        if temp.empty:
+        if part.empty:
             continue
 
-        temp[
+        part[
             "기준보증금(만원)"
         ] = base_deposit
 
-        temp[
+        part[
             "환산월세(만원)"
         ] = (
-            temp["임대료(만원)"]
+            part[
+                "임대료(만원)"
+            ]
             +
             (
-                temp["보증금(만원)"]
+                part[
+                    "보증금(만원)"
+                ]
                 - base_deposit
             )
             * 0.005
         )
 
-        result_list.append(
-            temp
+        parts.append(
+            part
         )
 
-    if not result_list:
-        return pd.DataFrame(
-            columns=df.columns.tolist()
-            + [
-                "기준보증금(만원)",
-                "환산월세(만원)"
-            ]
+    if not parts:
+
+        empty = (
+            df.iloc[
+                0:0
+            ].copy()
         )
 
-    result = pd.concat(
-        result_list,
+        empty[
+            "기준보증금(만원)"
+        ] = pd.Series(
+            dtype="float64"
+        )
+
+        empty[
+            "환산월세(만원)"
+        ] = pd.Series(
+            dtype="float64"
+        )
+
+        return empty
+
+    return pd.concat(
+        parts,
         ignore_index=True
     )
 
-    return result
+
+def make_selected_deposit_caption(
+    base_deposits
+):
+
+    pieces = []
+
+    for base_deposit in (
+        sorted(
+            base_deposits
+        )
+    ):
+
+        dep_min, dep_max = (
+            get_deposit_range(
+                base_deposit
+            )
+        )
+
+        if base_deposit == 0:
+
+            pieces.append(
+                "보증금 0만원 → 무보증 기준"
+            )
+
+        else:
+
+            pieces.append(
+                f"{dep_min:,}-{dep_max - 1:,}만원 "
+                f"→ {base_deposit:,}만원 기준"
+            )
+
+    return " / ".join(
+        pieces
+    )
 
 
 # ============================================================
-# 12. 공간 단위별 통계
+# 11. 공간 단위별 통계
 # ============================================================
 
 def aggregate_rent(
@@ -808,7 +915,7 @@ def aggregate_rent(
 
 
 # ============================================================
-# 13. 지도 색상
+# 12. 지도 색상
 # ============================================================
 
 def add_map_color(
@@ -847,6 +954,7 @@ def add_map_color(
     def make_color(value):
 
         if pd.isna(value):
+
             return [
                 220,
                 220,
@@ -873,7 +981,9 @@ def add_map_color(
 
     data = data.copy()
 
-    data["fill_color"] = (
+    data[
+        "fill_color"
+    ] = (
         data[value_col]
         .apply(
             make_color
@@ -888,7 +998,7 @@ def add_map_color(
 
 
 # ============================================================
-# 14. 법정동 거래건수 라벨
+# 13. 법정동 거래건수 라벨
 # ============================================================
 
 def make_dong_label_data(
@@ -921,7 +1031,9 @@ def make_dong_label_data(
         )
     )
 
-    label_gdf["geometry"] = (
+    label_gdf[
+        "geometry"
+    ] = (
         label_gdf
         .geometry
         .representative_point()
@@ -934,15 +1046,21 @@ def make_dong_label_data(
         )
     )
 
-    label_gdf["longitude"] = (
+    label_gdf[
+        "longitude"
+    ] = (
         label_gdf.geometry.x
     )
 
-    label_gdf["latitude"] = (
+    label_gdf[
+        "latitude"
+    ] = (
         label_gdf.geometry.y
     )
 
-    label_gdf["label"] = (
+    label_gdf[
+        "label"
+    ] = (
         label_gdf[
             "거래건수"
         ]
@@ -965,7 +1083,7 @@ def make_dong_label_data(
 
 
 # ============================================================
-# 15. 보증금별 월세 통계
+# 14. 보증금 수준별 월세 통계
 # ============================================================
 
 def make_deposit_stats(
@@ -1031,7 +1149,9 @@ def make_deposit_stats(
                 ] < base + 1000
             ),
             "보증금기준"
-        ] = f"{base:,}만원"
+        ] = (
+            f"{base:,}만원"
+        )
 
     chart_df[
         "보증금기준"
@@ -1073,13 +1193,17 @@ def make_deposit_stats(
         .reset_index()
     )
 
-    stats["평균월세"] = (
+    stats[
+        "평균월세"
+    ] = (
         stats[
             "평균월세"
         ].round(1)
     )
 
-    stats["중앙월세"] = (
+    stats[
+        "중앙월세"
+    ] = (
         stats[
             "중앙월세"
         ].round(1)
@@ -1089,37 +1213,40 @@ def make_deposit_stats(
 
 
 # ============================================================
-# 16. 면적별 환산월세 통계
+# 15. 면적별 환산월세 통계
 # ============================================================
+
+AREA_BINS = list(
+    range(
+        5,
+        95,
+        5
+    )
+)
+
+AREA_BIN_ORDER = [
+    f"{start}-{start + 5}"
+    for start
+    in AREA_BINS[:-1]
+]
+
 
 def make_area_stats(
     df,
     selected_bases
 ):
 
-    # 면적 그래프는 5-85㎡ 전체를 사용
-    chart_df = filter_rent_data(
-        df,
-        selected_bases,
-        5,
-        85
+    chart_df = (
+        filter_rent_data(
+            df,
+            selected_bases,
+            5,
+            85
+        )
     )
 
     if chart_df.empty:
         return pd.DataFrame()
-
-    bins = list(
-        range(
-            5,
-            95,
-            5
-        )
-    )
-
-    labels = [
-        f"{start}-{start + 5}"
-        for start in bins[:-1]
-    ]
 
     chart_df[
         "면적대"
@@ -1127,8 +1254,8 @@ def make_area_stats(
         chart_df[
             "임대면적"
         ],
-        bins=bins,
-        labels=labels,
+        bins=AREA_BINS,
+        labels=AREA_BIN_ORDER,
         right=False
     )
 
@@ -1161,6 +1288,14 @@ def make_area_stats(
     )
 
     stats[
+        "면적대"
+    ] = (
+        stats[
+            "면적대"
+        ].astype(str)
+    )
+
+    stats[
         "평균월세"
     ] = (
         stats[
@@ -1176,16 +1311,168 @@ def make_area_stats(
         ].round(1)
     )
 
-    # Altair 정렬용
-    stats["면적대"] = (
+    return stats
+
+
+# ============================================================
+# 16. 지하철 노선별 통계
+# ============================================================
+
+def make_subway_line_stats(
+    station_match,
+    subway
+):
+
+    station_lines = (
+        subway[
+            [
+                "station_id",
+                "hoseon"
+            ]
+        ]
+        .drop_duplicates()
+        .copy()
+    )
+
+    station_lines[
+        "station_id"
+    ] = (
+        station_lines[
+            "station_id"
+        ]
+        .astype(str)
+    )
+
+    station_lines[
+        "노선"
+    ] = (
+        station_lines[
+            "hoseon"
+        ]
+        .astype(str)
+        .str.split(",")
+    )
+
+    station_lines = (
+        station_lines
+        .explode(
+            "노선"
+        )
+    )
+
+    station_lines[
+        "노선"
+    ] = (
+        station_lines[
+            "노선"
+        ]
+        .astype(str)
+        .str.strip()
+    )
+
+    station_match = (
+        station_match.copy()
+    )
+
+    station_match[
+        "station_id"
+    ] = (
+        station_match[
+            "station_id"
+        ]
+        .astype(str)
+    )
+
+    line_match = (
+        station_match[
+            [
+                "rent_id",
+                "station_id",
+                "환산월세(만원)"
+            ]
+        ]
+        .merge(
+            station_lines[
+                [
+                    "station_id",
+                    "노선"
+                ]
+            ],
+            on="station_id",
+            how="left"
+        )
+    )
+
+    # 동일 거래가 동일 노선의
+    # 여러 역 500m에 포함되는 경우 중복 제거
+    line_match = (
+        line_match
+        .dropna(
+            subset=[
+                "노선"
+            ]
+        )
+        .drop_duplicates(
+            subset=[
+                "rent_id",
+                "노선"
+            ]
+        )
+    )
+
+    stats = (
+        line_match
+        .groupby(
+            "노선"
+        )
+        .agg(
+            거래건수=(
+                "rent_id",
+                "nunique"
+            ),
+            평균=(
+                "환산월세(만원)",
+                "mean"
+            ),
+            중앙=(
+                "환산월세(만원)",
+                "median"
+            )
+        )
+        .reset_index()
+    )
+
+    stats = stats[
         stats[
-            "면적대"
-        ].astype(str)
+            "거래건수"
+        ] >= MIN_MAP_COUNT
+    ].copy()
+
+    stats[
+        "평균"
+    ] = (
+        stats[
+            "평균"
+        ].round(1)
+    )
+
+    stats[
+        "중앙"
+    ] = (
+        stats[
+            "중앙"
+        ].round(1)
     )
 
     return (
-        stats,
-        labels
+        stats
+        .sort_values(
+            "평균",
+            ascending=True
+        )
+        .reset_index(
+            drop=True
+        )
     )
 
 
@@ -1201,20 +1488,18 @@ def prepare_policy_data(
     area_max,
     floor,
     priority,
-    selected_bases
+    base_deposit
 ):
 
     units = (
-        policy_units
-        .copy()
+        policy_units.copy()
     )
 
     buildings = (
-        policy_buildings
-        .copy()
+        policy_buildings.copy()
     )
 
-    # merge 문제 방지
+    # ID 자료형 통일
     units[
         "building_id"
     ] = (
@@ -1235,6 +1520,25 @@ def prepare_policy_data(
         .str.strip()
     )
 
+    buildings[
+        "longitude"
+    ] = pd.to_numeric(
+        buildings[
+            "longitude"
+        ],
+        errors="coerce"
+    )
+
+    buildings[
+        "latitude"
+    ] = pd.to_numeric(
+        buildings[
+            "latitude"
+        ],
+        errors="coerce"
+    )
+
+    # 정책주택은 전용면적 기준
     units = units[
         (
             units[
@@ -1280,6 +1584,7 @@ def prepare_policy_data(
         ].copy()
 
     if units.empty:
+
         return (
             units,
             pd.DataFrame()
@@ -1314,15 +1619,11 @@ def prepare_policy_data(
         max_rent_col
     ]:
 
-        units[col] = (
-            pd.to_numeric(
-                units[col],
-                errors="coerce"
-            )
+        units[col] = pd.to_numeric(
+            units[col],
+            errors="coerce"
         )
 
-    # 정책주택 위치 자체는
-    # 다중 보증금이어도 표시한다.
     units[
         "정책월세_만원"
     ] = np.nan
@@ -1331,15 +1632,9 @@ def prepare_policy_data(
         "비교가능"
     ] = False
 
-    # 정책월세 비교는
-    # 기준 보증금이 하나일 때만 계산
-    if len(
-        selected_bases
-    ) == 1:
-
-        base_deposit = (
-            selected_bases[0]
-        )
+    # 정책주택 공식 전환월세는
+    # 보증금 기준을 하나만 선택한 경우 계산
+    if base_deposit is not None:
 
         dep_gap = (
             units[
@@ -1423,16 +1718,16 @@ def prepare_policy_data(
         )
 
         units[
-            "정책월세_만원"
-        ] = (
-            units[
-                "정책월세_만원"
-            ].round(1)
-        )
-
-        units[
             "비교가능"
         ] = comparable
+
+    units[
+        "정책월세_만원"
+    ] = (
+        units[
+            "정책월세_만원"
+        ].round(1)
+    )
 
     policy_stats = (
         units
@@ -1493,41 +1788,21 @@ def prepare_policy_data(
             ].round(1)
         )
 
-    static_cols = [
-        "building_id",
-        "주택명",
-        "지오코딩주소",
-        "longitude",
-        "latitude"
-    ]
-
     policy_map = (
         buildings[
-            static_cols
+            [
+                "building_id",
+                "주택명",
+                "지오코딩주소",
+                "longitude",
+                "latitude"
+            ]
         ]
         .merge(
             policy_stats,
             on="building_id",
             how="inner"
         )
-    )
-
-    policy_map[
-        "longitude"
-    ] = pd.to_numeric(
-        policy_map[
-            "longitude"
-        ],
-        errors="coerce"
-    )
-
-    policy_map[
-        "latitude"
-    ] = pd.to_numeric(
-        policy_map[
-            "latitude"
-        ],
-        errors="coerce"
     )
 
     policy_map = policy_map[
@@ -1539,20 +1814,6 @@ def prepare_policy_data(
             "latitude"
         ].notna()
     ].copy()
-
-    policy_map["radius"] = (
-        100
-        +
-        np.sqrt(
-            policy_map[
-                "조건공급호수"
-            ]
-        )
-        * 25
-    ).clip(
-        lower=120,
-        upper=320
-    )
 
     policy_map[
         "tip_title"
@@ -1600,13 +1861,24 @@ def prepare_policy_data(
         "㎡"
     )
 
-    if len(
-        selected_bases
-    ) == 1:
+    if base_deposit is None:
 
-        base_deposit = (
-            selected_bases[0]
+        policy_map[
+            "tip_3"
+        ] = (
+            priority
+            +
+            " · 다중 보증금 선택"
         )
+
+        policy_map[
+            "tip_4"
+        ] = (
+            "전환월세는 기준 보증금 "
+            "1개 선택 시 계산"
+        )
+
+    else:
 
         policy_map[
             "tip_3"
@@ -1637,23 +1909,6 @@ def prepare_policy_data(
             )
         )
 
-    else:
-
-        policy_map[
-            "tip_3"
-        ] = (
-            priority
-            +
-            " · 다중 보증금 선택"
-        )
-
-        policy_map[
-            "tip_4"
-        ] = (
-            "LH 전환월세는 "
-            "단일 보증금 선택 시 표시"
-        )
-
     policy_map[
         "tip_5"
     ] = (
@@ -1668,6 +1923,10 @@ def prepare_policy_data(
     )
 
 
+# ------------------------------------------------------------
+# LH 청년매입임대 네모 마커
+# ------------------------------------------------------------
+
 def make_policy_layer(
     policy_map
 ):
@@ -1679,12 +1938,10 @@ def make_policy_layer(
         policy_map.copy()
     )
 
-    # 네모 마커
     policy_marker[
         "marker"
     ] = "■"
 
-    # 공급호수에 따라 약간 크기 차이
     policy_marker[
         "marker_size"
     ] = (
@@ -1722,148 +1979,15 @@ def make_policy_layer(
         ],
 
         get_text_anchor='"middle"',
+
         get_alignment_baseline='"center"',
 
         pickable=True
     )
 
-# ============================================================
-# 18. 노선별 통계
-# ============================================================
-
-def make_line_stats(
-    station_match,
-    subway
-):
-
-    station_line = (
-        subway[
-            [
-                "station_id",
-                "hoseon"
-            ]
-        ]
-        .copy()
-    )
-
-    station_line[
-        "station_id"
-    ] = (
-        station_line[
-            "station_id"
-        ].astype(str)
-    )
-
-    station_line[
-        "노선"
-    ] = (
-        station_line[
-            "hoseon"
-        ]
-        .astype(str)
-        .str.split(",")
-    )
-
-    station_line = (
-        station_line
-        .explode("노선")
-    )
-
-    station_line[
-        "노선"
-    ] = (
-        station_line[
-            "노선"
-        ]
-        .astype(str)
-        .str.strip()
-    )
-
-    station_line = (
-        station_line[
-            [
-                "station_id",
-                "노선"
-            ]
-        ]
-        .drop_duplicates()
-    )
-
-    line_match = (
-        station_match
-        .merge(
-            station_line,
-            on="station_id",
-            how="left"
-        )
-    )
-
-    # 같은 거래가 같은 노선의
-    # 여러 역에 포함되더라도
-    # 노선 통계에서는 1번만 계산
-    line_match = (
-        line_match
-        .drop_duplicates(
-            subset=[
-                "rent_id",
-                "노선"
-            ]
-        )
-    )
-
-    line_stats = (
-        line_match
-        .dropna(
-            subset=[
-                "노선"
-            ]
-        )
-        .groupby(
-            "노선"
-        )
-        .agg(
-            거래건수=(
-                "rent_id",
-                "nunique"
-            ),
-            평균환산월세=(
-                "환산월세(만원)",
-                "mean"
-            ),
-            중앙환산월세=(
-                "환산월세(만원)",
-                "median"
-            )
-        )
-        .reset_index()
-    )
-
-    line_stats[
-        "평균환산월세"
-    ] = (
-        line_stats[
-            "평균환산월세"
-        ].round(1)
-    )
-
-    line_stats[
-        "중앙환산월세"
-    ] = (
-        line_stats[
-            "중앙환산월세"
-        ].round(1)
-    )
-
-    return (
-        line_stats
-        .sort_values(
-            "평균환산월세"
-        )
-    )
-
 
 # ============================================================
-# 19. 공통 툴팁
+# 18. 지도 툴팁 및 기본 View
 # ============================================================
 
 MAP_TOOLTIP = {
@@ -1887,7 +2011,7 @@ SEOUL_VIEW = pdk.ViewState(
 
 
 # ============================================================
-# 20. 검색 실행
+# 19. 검색 실행
 # ============================================================
 
 if run_search:
@@ -1895,27 +2019,45 @@ if run_search:
     if not selected_deposit_labels:
 
         st.warning(
-            "기준 보증금을 하나 이상 "
-            "선택해 주세요."
+            "기준 보증금을 하나 이상 선택해 주세요."
         )
 
         st.stop()
 
-    selected_bases = [
+    selected_base_deposits = sorted([
         DEPOSIT_OPTIONS[
             label
         ]
         for label
         in selected_deposit_labels
-    ]
+    ])
+
+    selected_deposit_text = (
+        ", ".join(
+            deposit_label(
+                value
+            )
+            for value
+            in selected_base_deposits
+        )
+    )
+
+    policy_base_deposit = (
+        selected_base_deposits[0]
+        if len(
+            selected_base_deposits
+        ) == 1
+        else None
+    )
 
     with st.spinner(
-        f"{selected_year}년 "
-        f"거래 데이터를 불러오는 중..."
+        f"{selected_year}년 거래 데이터를 불러오는 중..."
     ):
 
-        df_raw = load_rent(
-            selected_year
+        df_raw = (
+            load_rent(
+                selected_year
+            )
         )
 
     common_df = (
@@ -1929,18 +2071,19 @@ if run_search:
         )
     )
 
-    df = filter_rent_data(
-        common_df,
-        selected_bases,
-        area_min,
-        area_max
+    df = (
+        filter_rent_data(
+            common_df,
+            selected_base_deposits,
+            area_min,
+            area_max
+        )
     )
 
     if df.empty:
 
         st.warning(
-            "선택한 조건에 해당하는 "
-            "거래가 없습니다."
+            "선택한 조건에 해당하는 거래가 없습니다."
         )
 
         st.stop()
@@ -1981,7 +2124,7 @@ if run_search:
             area_max,
             selected_floor,
             policy_priority,
-            selected_bases
+            policy_base_deposit
         )
 
         policy_layer = (
@@ -1995,12 +2138,6 @@ if run_search:
     # 결과 요약
     # ========================================================
 
-    deposit_text = (
-        ", ".join(
-            selected_deposit_labels
-        )
-    )
-
     st.subheader(
         f"📊 {selected_year}년 "
         f"{house_type_selection} "
@@ -2008,21 +2145,21 @@ if run_search:
     )
 
     st.markdown(
-        f"**기준 보증금 {deposit_text} · "
+        f"**기준 보증금 {selected_deposit_text} · "
         f"임대면적 {area_min}-{area_max}㎡ · "
         f"건물 연식 {age_min}-{age_max}년**"
     )
 
-    col1, col2, col3 = (
+    metric1, metric2, metric3 = (
         st.columns(3)
     )
 
-    col1.metric(
+    metric1.metric(
         "거래건수",
         f"{len(df):,}건"
     )
 
-    col2.metric(
+    metric2.metric(
         "평균 환산월세",
         (
             f"{df['환산월세(만원)'].mean():.1f}"
@@ -2030,7 +2167,7 @@ if run_search:
         )
     )
 
-    col3.metric(
+    metric3.metric(
         "중앙 환산월세",
         (
             f"{df['환산월세(만원)'].median():.1f}"
@@ -2039,14 +2176,14 @@ if run_search:
     )
 
     st.caption(
-        "선택한 각 보증금 구간의 거래를 "
-        "해당 대표 보증금으로 각각 환산한 뒤 "
-        "통합해 분석합니다."
+        make_selected_deposit_caption(
+            selected_base_deposits
+        )
     )
 
 
     # ========================================================
-    # 21. 법정동
+    # 20. 법정동별
     # ========================================================
 
     if spatial_unit == "법정동별":
@@ -2123,8 +2260,7 @@ if run_search:
         if dong_map.empty:
 
             st.warning(
-                "거래 5건 이상인 "
-                "법정동이 없습니다."
+                "거래 5건 이상인 법정동이 없습니다."
             )
 
             st.stop()
@@ -2216,9 +2352,7 @@ if run_search:
             data=dong_map,
             filled=True,
             stroked=True,
-            get_fill_color=(
-                "fill_color"
-            ),
+            get_fill_color="fill_color",
             get_line_color=[
                 90,
                 90,
@@ -2235,6 +2369,7 @@ if run_search:
         ]
 
         if policy_layer is not None:
+
             layers.append(
                 policy_layer
             )
@@ -2254,9 +2389,7 @@ if run_search:
                 count_text_layer = (
                     pdk.Layer(
                         "TextLayer",
-                        data=(
-                            dong_label_data
-                        ),
+                        data=dong_label_data,
                         get_position=[
                             "longitude",
                             "latitude"
@@ -2269,12 +2402,8 @@ if run_search:
                             40,
                             220
                         ],
-                        get_text_anchor=(
-                            '"middle"'
-                        ),
-                        get_alignment_baseline=(
-                            '"center"'
-                        ),
+                        get_text_anchor='"middle"',
+                        get_alignment_baseline='"center"',
                         pickable=False
                     )
                 )
@@ -2285,9 +2414,7 @@ if run_search:
 
         deck = pdk.Deck(
             layers=layers,
-            initial_view_state=(
-                SEOUL_VIEW
-            ),
+            initial_view_state=SEOUL_VIEW,
             tooltip=MAP_TOOLTIP,
             map_provider="carto",
             map_style="light"
@@ -2301,9 +2428,17 @@ if run_search:
         st.caption(
             f"색상은 법정동별 평균 환산월세의 "
             f"5-95분위({vmin:.1f}-{vmax:.1f}만원)를 "
-            f"기준으로 하며 거래 "
-            f"{MIN_MAP_COUNT}건 미만 지역은 제외합니다."
+            f"기준으로 하며 거래 {MIN_MAP_COUNT}건 미만 "
+            f"지역은 제외합니다."
         )
+
+        if show_count_labels:
+
+            st.caption(
+                f"지도 숫자는 법정동별 거래건수이며 "
+                f"{MIN_DONG_LABEL_COUNT}건 이상인 지역만 "
+                f"표시합니다."
+            )
 
         display_df = (
             dong_map[
@@ -2348,7 +2483,7 @@ if run_search:
 
 
     # ========================================================
-    # 22. 격자
+    # 21. 격자별
     # ========================================================
 
     elif spatial_unit == "격자별":
@@ -2413,8 +2548,7 @@ if run_search:
         if grid_map.empty:
 
             st.warning(
-                "거래 5건 이상인 "
-                "격자가 없습니다."
+                "거래 5건 이상인 격자가 없습니다."
             )
 
             st.stop()
@@ -2508,9 +2642,7 @@ if run_search:
             data=grid_map,
             filled=True,
             stroked=True,
-            get_fill_color=(
-                "fill_color"
-            ),
+            get_fill_color="fill_color",
             get_line_color=[
                 90,
                 90,
@@ -2527,15 +2659,14 @@ if run_search:
         ]
 
         if policy_layer is not None:
+
             layers.append(
                 policy_layer
             )
 
         deck = pdk.Deck(
             layers=layers,
-            initial_view_state=(
-                SEOUL_VIEW
-            ),
+            initial_view_state=SEOUL_VIEW,
             tooltip=MAP_TOOLTIP,
             map_provider="carto",
             map_style="light"
@@ -2549,8 +2680,8 @@ if run_search:
         st.caption(
             f"색상은 500m 격자별 평균 환산월세의 "
             f"5-95분위({vmin:.1f}-{vmax:.1f}만원)를 "
-            f"기준으로 하며 거래 "
-            f"{MIN_MAP_COUNT}건 미만 격자는 제외합니다."
+            f"기준으로 하며 거래 {MIN_MAP_COUNT}건 미만 "
+            f"격자는 제외합니다."
         )
 
         display_df = (
@@ -2594,7 +2725,7 @@ if run_search:
 
 
     # ========================================================
-    # 23. 지하철역
+    # 22. 지하철역별
     # ========================================================
 
     elif spatial_unit == "지하철역별":
@@ -2602,24 +2733,30 @@ if run_search:
         rent_station = (
             load_rent_station()
         )
-        
+
         subway = (
             load_subway()
         )
-        
+
         subway_buffer = (
             load_subway_buffer()
         )
-        
+
         gu = load_gu()
 
-        # 타입 통일
+
+        # ----------------------------------------------------
+        # station_id 자료형 통일
+        # ----------------------------------------------------
+
         rent_station[
             "station_id"
         ] = (
             rent_station[
                 "station_id"
-            ].astype(str)
+            ]
+            .astype(str)
+            .str.strip()
         )
 
         subway[
@@ -2627,8 +2764,25 @@ if run_search:
         ] = (
             subway[
                 "station_id"
-            ].astype(str)
+            ]
+            .astype(str)
+            .str.strip()
         )
+
+        subway_buffer[
+            "station_id"
+        ] = (
+            subway_buffer[
+                "station_id"
+            ]
+            .astype(str)
+            .str.strip()
+        )
+
+
+        # ----------------------------------------------------
+        # 현재 조건 거래와 역세권 대응
+        # ----------------------------------------------------
 
         station_match = (
             rent_station.merge(
@@ -2653,20 +2807,23 @@ if run_search:
             st.stop()
 
 
-        # -----------------------------------------------
-        # 전체 노선 통계는
-        # 지도 노선 필터 적용 전 계산
-        # -----------------------------------------------
+        # ----------------------------------------------------
+        # 노선별 통계
+        # 지도 노선 선택과 무관하게 전체 노선 계산
+        # ----------------------------------------------------
 
         line_stats = (
-            make_line_stats(
+            make_subway_line_stats(
                 station_match,
                 subway
             )
         )
 
 
+        # ----------------------------------------------------
         # 역별 통계
+        # ----------------------------------------------------
+
         station_stats = (
             aggregate_rent(
                 station_match,
@@ -2685,7 +2842,10 @@ if run_search:
         )
 
 
-        # 지도에만 노선 선택 적용
+        # ----------------------------------------------------
+        # 지도에서만 선택 노선 적용
+        # ----------------------------------------------------
+
         if selected_subway_lines:
 
             station_map = (
@@ -2716,30 +2876,31 @@ if run_search:
                 "거래건수"
             ] >= MIN_MAP_COUNT
         ].copy()
-        
-        # ========================================================
-        # 지도에 표시되는 역의 500m 버퍼만 추출
-        # ========================================================
-        
-        station_map[
-            "station_id"
-        ] = (
-            station_map[
-                "station_id"
-            ]
-            .astype(str)
-            .str.strip()
-        )
-        
+
+
+        if station_map.empty:
+
+            st.warning(
+                "선택한 조건에 해당하는 "
+                "거래 5건 이상의 지하철역이 없습니다."
+            )
+
+            st.stop()
+
+
+        # ----------------------------------------------------
+        # 현재 지도에 표시되는 역의 500m 버퍼만 추출
+        # ----------------------------------------------------
+
         visible_station_ids = set(
             station_map[
                 "station_id"
             ]
             .dropna()
-            .tolist()
+            .astype(str)
         )
-        
-        buffer_map = (
+
+        candidate_buffer = (
             subway_buffer[
                 subway_buffer[
                     "station_id"
@@ -2750,16 +2911,137 @@ if run_search:
             .copy()
         )
 
-        if station_map.empty:
 
-            st.warning(
-                "선택한 조건에 해당하는 "
-                "거래 5건 이상의 "
-                "지하철역이 없습니다."
+        # ----------------------------------------------------
+        # Polygon을 LineString 경계로 변환
+        #
+        # 중요:
+        # Polygon 자체를 PyDeck에 넘기지 않음.
+        # 따라서 내부가 파랗게 채워지는 문제 방지.
+        # ----------------------------------------------------
+
+        buffer_map = None
+
+        if not candidate_buffer.empty:
+
+            candidate_buffer = (
+                candidate_buffer[
+                    ~candidate_buffer.geometry.is_empty
+                    &
+                    candidate_buffer.geometry.notna()
+                ]
+                .copy()
             )
 
-            st.stop()
+            if not candidate_buffer.empty:
 
+                projected = (
+                    candidate_buffer
+                    .to_crs(
+                        epsg=5186
+                    )
+                    .copy()
+                )
+
+                polygon_mask = (
+                    projected
+                    .geometry
+                    .geom_type
+                    .isin(
+                        [
+                            "Polygon",
+                            "MultiPolygon"
+                        ]
+                    )
+                )
+
+                polygon_part = (
+                    projected[
+                        polygon_mask
+                    ].copy()
+                )
+
+                line_part = (
+                    projected[
+                        ~polygon_mask
+                    ].copy()
+                )
+
+
+                # Polygon은 면적 검증 후 경계선만 사용
+                if not polygon_part.empty:
+
+                    polygon_part[
+                        "_area_m2"
+                    ] = (
+                        polygon_part
+                        .geometry
+                        .area
+                    )
+
+                    polygon_part = (
+                        polygon_part[
+                            polygon_part[
+                                "_area_m2"
+                            ].between(
+                                10000,
+                                5000000
+                            )
+                        ]
+                        .copy()
+                    )
+
+                    if not polygon_part.empty:
+
+                        polygon_part[
+                            "geometry"
+                        ] = (
+                            polygon_part
+                            .geometry
+                            .boundary
+                        )
+
+
+                # 이미 LineString인 파일에도 대응
+                buffer_parts = []
+
+                if not polygon_part.empty:
+
+                    buffer_parts.append(
+                        polygon_part
+                    )
+
+                if not line_part.empty:
+
+                    buffer_parts.append(
+                        line_part
+                    )
+
+
+                if buffer_parts:
+
+                    buffer_map = (
+                        pd.concat(
+                            buffer_parts,
+                            ignore_index=True
+                        )
+                    )
+
+                    buffer_map = (
+                        gpd.GeoDataFrame(
+                            buffer_map,
+                            geometry="geometry",
+                            crs=projected.crs
+                        )
+                        .to_crs(
+                            epsg=4326
+                        )
+                    )
+
+
+        # ----------------------------------------------------
+        # 역 마커 색상
+        # ----------------------------------------------------
 
         (
             station_map,
@@ -2768,7 +3050,6 @@ if run_search:
         ) = add_map_color(
             station_map
         )
-
 
         station_map[
             "radius"
@@ -2785,7 +3066,6 @@ if run_search:
             lower=100,
             upper=400
         )
-
 
         station_map[
             "tip_title"
@@ -2845,7 +3125,9 @@ if run_search:
 
         station_map[
             "tip_5"
-        ] = "500m 역세권"
+        ] = (
+            "500m 역세권"
+        )
 
 
         station_data = pd.DataFrame(
@@ -2855,6 +3137,10 @@ if run_search:
             )
         )
 
+
+        # ----------------------------------------------------
+        # 서울 자치구 경계
+        # ----------------------------------------------------
 
         gu_layer = pdk.Layer(
             "GeoJsonLayer",
@@ -2872,6 +3158,10 @@ if run_search:
         )
 
 
+        # ----------------------------------------------------
+        # 역 마커
+        # ----------------------------------------------------
+
         station_layer = pdk.Layer(
             "ScatterplotLayer",
             data=station_data,
@@ -2879,9 +3169,7 @@ if run_search:
                 "longitude",
                 "latitude"
             ],
-            get_fill_color=(
-                "fill_color"
-            ),
+            get_fill_color="fill_color",
             get_line_color=[
                 70,
                 70,
@@ -2897,120 +3185,55 @@ if run_search:
             auto_highlight=True
         )
 
-        # ========================================================
-        # 지하철역 500m 버퍼 경계
-        # ========================================================
-        
-        buffer_layer = None
-        
-        if not buffer_map.empty:
-        
-            buffer_layer = pdk.Layer(
-                "GeoJsonLayer",
-                data=buffer_map,
-        
-                # geometry 자체가 이미 LineString
-                filled=False,
-                stroked=True,
-        
-                # 너무 튀지 않는 회색
-                get_line_color=[
-                    90,
-                    100,
-                    115,
-                    100
-                ],
-        
-                line_width_min_pixels=1,
-                line_width_max_pixels=2,
-        
-                pickable=False
-            )
+
+        # ----------------------------------------------------
+        # 레이어 구성
+        # ----------------------------------------------------
 
         layers = [
             gu_layer
         ]
-        
-        if buffer_layer is not None:
+
+
+        # 500m 버퍼 자동 표시
+        if (
+            buffer_map is not None
+            and not buffer_map.empty
+        ):
+
+            buffer_layer = pdk.Layer(
+                "GeoJsonLayer",
+                data=buffer_map,
+
+                # geometry 자체가 LineString
+                filled=False,
+                stroked=True,
+
+                get_line_color=[
+                    105,
+                    105,
+                    105,
+                    90
+                ],
+
+                line_width_min_pixels=0.8,
+                line_width_max_pixels=1.5,
+
+                pickable=False
+            )
+
             layers.append(
                 buffer_layer
             )
 
-        # -----------------------------------------------
-        # 500m 버퍼
-        # 기본 OFF
-        # -----------------------------------------------
 
-        if show_subway_buffer:
-
-            try:
-
-                subway_buffer = (
-                    load_subway_buffer()
-                )
-
-                subway_buffer[
-                    "station_id"
-                ] = (
-                    subway_buffer[
-                        "station_id"
-                    ]
-                    .astype(str)
-                )
-
-                visible_ids = set(
-                    station_map[
-                        "station_id"
-                    ].astype(str)
-                )
-
-                buffer_map = (
-                    subway_buffer[
-                        subway_buffer[
-                            "station_id"
-                        ].isin(
-                            visible_ids
-                        )
-                    ]
-                    .copy()
-                )
-
-                if not buffer_map.empty:
-
-                    buffer_layer = (
-                        pdk.Layer(
-                            "GeoJsonLayer",
-                            data=buffer_map,
-                            filled=False,
-                            stroked=True,
-                            get_line_color=[
-                                120,
-                                120,
-                                120,
-                                90
-                            ],
-                            line_width_min_pixels=1,
-                            pickable=False
-                        )
-                    )
-
-                    layers.append(
-                        buffer_layer
-                    )
-
-            except Exception as e:
-
-                st.warning(
-                    "500m 버퍼 레이어를 "
-                    f"불러오지 못했습니다: {e}"
-                )
-
-
+        # 역 마커는 버퍼 위
         layers.append(
             station_layer
         )
 
 
+        # LH는 가장 위
         if policy_layer is not None:
 
             layers.append(
@@ -3018,25 +3241,23 @@ if run_search:
             )
 
 
-        # TextLayer는 한글 렌더링 문제 때문에 제외
-
-
         deck = pdk.Deck(
             layers=layers,
-            initial_view_state=(
-                SEOUL_VIEW
-            ),
+            initial_view_state=SEOUL_VIEW,
             tooltip=MAP_TOOLTIP,
             map_provider="carto",
             map_style="light"
         )
-
 
         st.pydeck_chart(
             deck,
             use_container_width=True
         )
 
+
+        # ----------------------------------------------------
+        # 지도 설명
+        # ----------------------------------------------------
 
         if selected_subway_lines:
 
@@ -3063,9 +3284,21 @@ if run_search:
             )
 
 
-        # -----------------------------------------------
-        # 역별 상세
-        # -----------------------------------------------
+        if (
+            buffer_map is None
+            or buffer_map.empty
+        ):
+
+            st.caption(
+                "현재 지도에 표시할 수 있는 "
+                "500m 버퍼 geometry가 없어 "
+                "버퍼 경계는 생략했습니다."
+            )
+
+
+        # ----------------------------------------------------
+        # 역별 상세 통계
+        # ----------------------------------------------------
 
         station_display = (
             station_map[
@@ -3087,14 +3320,19 @@ if run_search:
                 columns={
                     "station_name":
                         "역명",
+
                     "hoseon":
                         "노선",
+
                     "평균":
                         "평균 환산월세",
+
                     "중앙":
                         "중앙 환산월세",
+
                     "최저":
                         "최저 환산월세",
+
                     "최고":
                         "최고 환산월세"
                 }
@@ -3113,31 +3351,32 @@ if run_search:
             )
 
 
-        # -----------------------------------------------
-        # 전체 노선 비교
-        # -----------------------------------------------
+        # ----------------------------------------------------
+        # 전체 노선별 평균
+        # ----------------------------------------------------
 
         st.markdown(
             "#### 🚇 노선별 평균 환산월세"
         )
 
         st.caption(
-            "지도에서 선택한 노선과 관계없이 "
-            "현재 주택·보증금·면적·연식·층수 조건에 "
-            "해당하는 전체 지하철 노선을 비교합니다."
+            "지도에서 선택한 노선과 관계없이 현재 주택유형·보증금·"
+            "면적·연식·층수 조건에 해당하는 전체 노선을 비교합니다. "
+            "같은 거래가 같은 노선의 여러 역 500m에 포함되는 경우 "
+            "한 번만 계산합니다."
         )
 
 
         if not line_stats.empty:
 
-            line_stats = (
+            line_chart_df = (
                 line_stats.copy()
             )
-            
-            line_stats[
+
+            line_chart_df[
                 "노선색"
             ] = (
-                line_stats[
+                line_chart_df[
                     "노선"
                 ]
                 .map(
@@ -3147,66 +3386,67 @@ if run_search:
                     "#808080"
                 )
             )
-            
-            # 현재 존재하는 노선만 domain/range 생성
+
             line_color_domain = (
-                line_stats[
+                line_chart_df[
                     "노선"
                 ].tolist()
             )
-            
+
             line_color_range = (
-                line_stats[
+                line_chart_df[
                     "노선색"
                 ].tolist()
             )
-            
-            
+
+
             line_chart = (
                 alt.Chart(
-                    line_stats
+                    line_chart_df
                 )
                 .mark_bar()
                 .encode(
-            
+
                     x=alt.X(
-                        "평균환산월세:Q",
+                        "평균:Q",
                         title="평균 환산월세 (만원)"
                     ),
-            
+
                     y=alt.Y(
                         "노선:N",
                         sort="-x",
                         title="노선"
                     ),
-            
+
                     color=alt.Color(
                         "노선:N",
+
                         scale=alt.Scale(
                             domain=line_color_domain,
                             range=line_color_range
                         ),
+
                         legend=None
                     ),
-            
+
                     tooltip=[
                         alt.Tooltip(
                             "노선:N",
                             title="노선"
                         ),
-            
+
                         alt.Tooltip(
-                            "평균환산월세:Q",
+                            "평균:Q",
                             title="평균 환산월세",
                             format=".1f"
                         ),
-            
+
                         alt.Tooltip(
-                            "중앙환산월세:Q",
+                            "중앙:Q",
                             title="중앙 환산월세",
                             format=".1f"
                         ),
-            
+
                         alt.Tooltip(
                             "거래건수:Q",
                             title="거래건수",
@@ -3215,10 +3455,29 @@ if run_search:
                     ]
                 )
             )
-            
+
+
             st.altair_chart(
                 line_chart,
                 use_container_width=True
+            )
+
+
+            line_display_df = (
+                line_stats
+                .rename(
+                    columns={
+                        "평균":
+                            "평균 환산월세",
+
+                        "중앙":
+                            "중앙 환산월세"
+                    }
+                )
+                .sort_values(
+                    "평균 환산월세",
+                    ascending=False
+                )
             )
 
 
@@ -3227,21 +3486,14 @@ if run_search:
             ):
 
                 st.dataframe(
-                    line_stats.rename(
-                        columns={
-                            "평균환산월세":
-                                "평균 환산월세",
-                            "중앙환산월세":
-                                "중앙 환산월세"
-                        }
-                    ),
+                    line_display_df,
                     use_container_width=True,
                     hide_index=True
                 )
 
 
     # ========================================================
-    # 24. LH 정책주택 결과
+    # 23. LH 청년매입임대 결과
     # ========================================================
 
     if show_policy:
@@ -3254,26 +3506,29 @@ if run_search:
 
         st.caption(
             "정책주택은 LH 공고의 전용면적을 사용하므로 "
-            "민간 실거래의 임대면적 조건과 면적 개념이 다릅니다. "
+            "민간 실거래의 임대면적과 면적 개념이 다릅니다. "
             "층수·주택유형 조건은 동일하게 적용합니다. "
-            "건축년도 정보가 없어 연식 조건은 적용하지 않습니다."
+            "공고 자료에 건축년도 정보가 없어 "
+            "건물 연식 조건은 정책주택에 적용하지 않습니다."
         )
 
 
         if policy_units_filtered.empty:
 
             st.info(
-                "현재 조건에 맞는 "
+                "현재 면적·층수·주택유형 조건에 맞는 "
                 "청년매입임대 공급호실이 없습니다."
             )
 
+
         else:
 
-            pcol1, pcol2, pcol3 = (
+            policy_metric1, policy_metric2, policy_metric3 = (
                 st.columns(3)
             )
 
-            pcol1.metric(
+
+            policy_metric1.metric(
                 "조건에 맞는 건물",
                 (
                     f"{policy_map['building_id'].nunique():,}"
@@ -3281,7 +3536,8 @@ if run_search:
                 )
             )
 
-            pcol2.metric(
+
+            policy_metric2.metric(
                 "조건에 맞는 공급호실",
                 (
                     f"{len(policy_units_filtered):,}"
@@ -3289,11 +3545,13 @@ if run_search:
                 )
             )
 
+
             comparable_units = (
                 policy_units_filtered[
                     "정책월세_만원"
                 ].notna()
             )
+
 
             if comparable_units.any():
 
@@ -3304,40 +3562,54 @@ if run_search:
                     ].median()
                 )
 
-                pcol3.metric(
+                policy_metric3.metric(
                     f"{policy_priority} 전환월세 중앙",
                     f"{policy_median:.1f}만원"
                 )
 
+
             else:
 
-                pcol3.metric(
+                policy_metric3.metric(
                     f"{policy_priority} 전환월세",
                     "비교 불가"
                 )
 
 
+            st.caption(
+                "지도에서 보라색 네모(■)는 "
+                "조건에 맞는 LH 청년매입임대입니다."
+            )
+
+
             if len(
-                selected_bases
+                selected_base_deposits
             ) > 1:
 
                 st.caption(
                     "기준 보증금을 여러 개 선택한 경우 "
-                    "LH 위치·공급호실은 표시하지만, "
-                    "LH 공식 전환월세 비교는 계산하지 않습니다. "
-                    "전환월세를 확인하려면 기준 보증금을 "
+                    "LH 위치와 공급호실은 표시하지만 "
+                    "공식 전환월세는 계산하지 않습니다. "
+                    "전환월세 비교가 필요하면 기준 보증금을 "
                     "하나만 선택해 주세요."
                 )
+
 
             else:
 
                 st.caption(
-                    "LH 전환월세는 공고의 기본 임대조건과 "
-                    "임대료→보증금 최대전환 조건 사이를 "
-                    "선형 보간해 계산합니다. "
-                    "민간 거래의 0.5% 환산식은 적용하지 않습니다."
+                    f"월세 비교값은 {policy_priority}의 공고상 "
+                    "'기본 임대조건-임대료→보증금 최대전환' "
+                    f"두 지점 사이를 선형 보간하여 보증금 "
+                    f"{policy_base_deposit:,}만원 기준으로 계산합니다. "
+                    "민간 거래에 사용하는 0.5% 환산식은 "
+                    "정책주택에 적용하지 않습니다."
                 )
 
+
+            # ------------------------------------------------
+            # 건물별 목록
+            # ------------------------------------------------
 
             policy_display = (
                 policy_map[
@@ -3368,18 +3640,25 @@ if run_search:
                     columns={
                         "지오코딩주소":
                             "주소",
+
                         "조건공급호수":
                             "조건 공급호수",
+
                         "비교가능호수":
                             "월세 비교가능호수",
+
                         "전용면적_최소":
                             "전용면적 최소",
+
                         "전용면적_최대":
                             "전용면적 최대",
+
                         "정책월세_중앙":
                             "전환월세 중앙",
+
                         "정책월세_최저":
                             "전환월세 최저",
+
                         "정책월세_최고":
                             "전환월세 최고"
                     }
@@ -3398,8 +3677,89 @@ if run_search:
                 )
 
 
+            # ------------------------------------------------
+            # 호실별 목록
+            # ------------------------------------------------
+
+            if policy_priority == "청년 1순위":
+
+                detail_prefix = (
+                    "청년1순위"
+                )
+
+            else:
+
+                detail_prefix = (
+                    "청년23순위"
+                )
+
+
+            policy_unit_display = (
+                policy_units_filtered[
+                    [
+                        "주택명",
+                        "지오코딩주소",
+                        "동호수",
+                        "전용면적",
+                        "층",
+                        "주택유형",
+
+                        f"{detail_prefix}_기본보증금_만원",
+
+                        f"{detail_prefix}_기본월세_만원",
+
+                        f"{detail_prefix}_최대전환보증금_만원",
+
+                        f"{detail_prefix}_최대전환월세_만원",
+
+                        "정책월세_만원"
+                    ]
+                ]
+                .sort_values(
+                    "정책월세_만원",
+                    na_position="last"
+                )
+                .rename(
+                    columns={
+                        "지오코딩주소":
+                            "주소",
+
+                        f"{detail_prefix}_기본보증금_만원":
+                            "기본 보증금",
+
+                        f"{detail_prefix}_기본월세_만원":
+                            "기본 월세",
+
+                        f"{detail_prefix}_최대전환보증금_만원":
+                            "최대전환 보증금",
+
+                        f"{detail_prefix}_최대전환월세_만원":
+                            "최대전환 월세",
+
+                        "정책월세_만원":
+                            (
+                                f"보증금 {policy_base_deposit:,}만원 전환월세"
+                                if policy_base_deposit is not None
+                                else "선택 보증금 전환월세"
+                            )
+                    }
+                )
+            )
+
+
+            with st.expander(
+                "🚪 정책주택 호실별 임대조건 보기"
+            ):
+
+                st.dataframe(
+                    policy_unit_display,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+
     # ========================================================
-    # 25. 시장 가격 구조
+    # 24. 서울 임대시장의 가격 구조
     # ========================================================
 
     st.divider()
@@ -3413,6 +3773,10 @@ if run_search:
         st.columns(2)
     )
 
+
+    # --------------------------------------------------------
+    # 보증금 수준별 월세
+    # --------------------------------------------------------
 
     deposit_stats = (
         make_deposit_stats(
@@ -3443,34 +3807,40 @@ if run_search:
                 strokeWidth=2
             )
             .encode(
+
                 x=alt.X(
                     "보증금기준:N",
+
                     sort=list(
                         DEPOSIT_OPTIONS.keys()
                     ),
+
                     title="보증금 수준"
                 ),
+
                 y=alt.Y(
                     "중앙월세:Q",
-                    title=(
-                        "월세 중앙값 (만원)"
-                    )
+                    title="월세 중앙값 (만원)"
                 ),
+
                 tooltip=[
                     alt.Tooltip(
                         "보증금기준:N",
                         title="보증금"
                     ),
+
                     alt.Tooltip(
                         "중앙월세:Q",
                         title="중앙 월세",
                         format=".1f"
                     ),
+
                     alt.Tooltip(
                         "평균월세:Q",
                         title="평균 월세",
                         format=".1f"
                     ),
+
                     alt.Tooltip(
                         "거래건수:Q",
                         title="거래건수",
@@ -3486,10 +3856,14 @@ if run_search:
         )
 
 
-    area_result = (
+    # --------------------------------------------------------
+    # 면적별 월세
+    # --------------------------------------------------------
+
+    area_stats = (
         make_area_stats(
             common_df,
-            selected_bases
+            selected_base_deposits
         )
     )
 
@@ -3501,20 +3875,12 @@ if run_search:
         )
 
         st.caption(
-            f"선택한 기준 보증금 "
-            f"{deposit_text}의 환산월세 중앙값입니다."
+            f"선택 보증금 {selected_deposit_text}의 각 구간을 "
+            "해당 대표 보증금으로 환산한 월세 중앙값입니다."
         )
 
-        if (
-            isinstance(
-                area_result,
-                tuple
-            )
-        ):
 
-            area_stats, area_order = (
-                area_result
-            )
+        if not area_stats.empty:
 
             area_chart = (
                 alt.Chart(
@@ -3525,36 +3891,39 @@ if run_search:
                     strokeWidth=2
                 )
                 .encode(
+
                     x=alt.X(
                         "면적대:N",
-                        sort=area_order,
+
+                        # 5-10이 가운데 들어가는 문제 방지
+                        sort=AREA_BIN_ORDER,
+
                         title="임대면적 (㎡)"
                     ),
+
                     y=alt.Y(
                         "중앙월세:Q",
-                        title=(
-                            "환산월세 중앙값 (만원)"
-                        )
+                        title="환산월세 중앙값 (만원)"
                     ),
+
                     tooltip=[
                         alt.Tooltip(
                             "면적대:N",
                             title="면적대"
                         ),
+
                         alt.Tooltip(
                             "중앙월세:Q",
-                            title=(
-                                "중앙 환산월세"
-                            ),
+                            title="중앙 환산월세",
                             format=".1f"
                         ),
+
                         alt.Tooltip(
                             "평균월세:Q",
-                            title=(
-                                "평균 환산월세"
-                            ),
+                            title="평균 환산월세",
                             format=".1f"
                         ),
+
                         alt.Tooltip(
                             "거래건수:Q",
                             title="거래건수",
