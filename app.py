@@ -1923,109 +1923,50 @@ def prepare_policy_data(
     )
 
 
-# ------------------------------------------------------------
-# LH 청년매입임대 정사각형 마커
-# - 화면 확대/축소와 관계없이 픽셀 크기 유지
-# - 공급호수가 많을수록 조금 크게 표시
-# ------------------------------------------------------------
+def make_square(row):
 
-def make_policy_layer(
-    policy_map
-):
+    lon = row["longitude"]
+    lat = row["latitude"]
 
-    if policy_map.empty:
-        return None
+    # 중심에서 각 방향으로 12m
+    # → 전체 약 24m × 24m 사각형
+    half_size_m = 12
 
-    policy_marker = (
-        policy_map.copy()
+    # 위도 1도당 약 111.32km
+    lat_delta = (
+        half_size_m
+        / 111320
     )
 
-    # --------------------------------------------------------
-    # 공급호수에 따른 마커 크기
-    #
-    # sqrt를 사용해서 공급호수가 많아져도
-    # 마커 크기가 지나치게 커지지 않도록 함
-    # --------------------------------------------------------
-
-    policy_marker[
-        "marker_size"
-    ] = (
-        10
-        +
-        np.sqrt(
-            policy_marker[
-                "조건공급호수"
-            ]
+    # 경도는 위도에 따라 실제 거리가 달라짐
+    lon_delta = (
+        half_size_m
+        / (
+            111320
+            * np.cos(
+                np.radians(lat)
+            )
         )
-        * 3
-    ).clip(
-        lower=12,
-        upper=26
     )
 
-
-    # --------------------------------------------------------
-    # 1×1 흰색 PNG
-    #
-    # 이 이미지를 IconLayer에서 정사각형 아이콘으로 사용하고
-    # mask=True를 통해 보라색으로 칠함
-    # --------------------------------------------------------
-
-    square_icon = {
-        "url": (
-            "data:image/png;base64,"
-            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
-            "CAYAAAAfFcSJAAAADUlEQVR42mP8z8BQ"
-            "DwAFgQIAWkL7WQAAAABJRU5ErkJggg=="
-        ),
-        "width": 1,
-        "height": 1,
-        "anchorX": 0.5,
-        "anchorY": 0.5,
-        "mask": True
-    }
-
-
-    policy_marker[
-        "icon_data"
-    ] = [
-        square_icon
-        for _ in range(
-            len(policy_marker)
-        )
+    return [
+        [
+            lon - lon_delta,
+            lat - lat_delta
+        ],
+        [
+            lon + lon_delta,
+            lat - lat_delta
+        ],
+        [
+            lon + lon_delta,
+            lat + lat_delta
+        ],
+        [
+            lon - lon_delta,
+            lat + lat_delta
+        ]
     ]
-
-
-    return pdk.Layer(
-        "IconLayer",
-
-        data=policy_marker,
-
-        get_position=[
-            "longitude",
-            "latitude"
-        ],
-
-        get_icon="icon_data",
-
-        # 공급호수에 따른 크기
-        get_size="marker_size",
-
-        # 중요:
-        # 실제 거리(m)가 아니라 화면 픽셀 기준
-        size_units="pixels",
-
-        # 보라색
-        get_color=[
-            105,
-            70,
-            180,
-            245
-        ],
-
-        pickable=True,
-        auto_highlight=True
-    )
 
 # ============================================================
 # 18. 지도 툴팁 및 기본 View
