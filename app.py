@@ -1945,7 +1945,7 @@ def make_policy_layer(
     # 지도 확대/축소 시에도 위치 식별용으로 충분한 크기
     # --------------------------------------------------------
 
-    square_size = 0.00012
+    square_size = 0.001
 
     def make_square(row):
 
