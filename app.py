@@ -1113,148 +1113,7 @@ def make_dong_label_data(
         ]
     )
 
-# ============================================================
-# 자치구 이름 라벨
-# ============================================================
 
-def make_gu_label_data(gu):
-
-    gu_label = (
-        gu.copy()
-        .to_crs(epsg=5179)
-    )
-
-    # 각 자치구 내부의 안정적인 표시점
-    gu_label["geometry"] = (
-        gu_label.geometry.representative_point()
-    )
-
-    gu_label = (
-        gu_label
-        .to_crs(epsg=4326)
-    )
-
-    gu_label["longitude"] = (
-        gu_label.geometry.x
-    )
-
-    gu_label["latitude"] = (
-        gu_label.geometry.y
-    )
-
-    # seoul_gu.geojson의 구 이름 필드에 맞춰 선택
-    # 보통 SIG_KOR_NM을 사용
-    gu_label["label"] = (
-        gu_label["SIG_KOR_NM"]
-        .astype(str)
-    )
-
-    return pd.DataFrame(
-        gu_label[
-            [
-                "label",
-                "longitude",
-                "latitude"
-            ]
-        ]
-    )
-
-# ============================================================
-# 자치구 배경 레이어
-# ============================================================
-
-def make_gu_background_layers(gu):
-
-    # --------------------------------------------------------
-    # 1. 자치구 경계
-    # --------------------------------------------------------
-
-    gu_boundary_layer = pdk.Layer(
-        "GeoJsonLayer",
-        data=gu,
-
-        filled=False,
-        stroked=True,
-
-        get_line_color=[
-            70,
-            70,
-            70,
-            80
-        ],
-
-        line_width_min_pixels=0.8,
-        line_width_max_pixels=1.3,
-
-        pickable=False
-    )
-
-
-    # --------------------------------------------------------
-    # 2. 자치구 이름 표시 위치
-    # --------------------------------------------------------
-
-    gu_label_data = (
-        make_gu_label_data(
-            gu
-        )
-    )
-
-
-    # --------------------------------------------------------
-    # 3. 자치구 이름
-    #
-    # character_set="auto"
-    # → 실제 label에 포함된 한글 글자를 자동으로
-    #   font atlas에 포함
-    # --------------------------------------------------------
-
-    gu_text_layer = pdk.Layer(
-        "TextLayer",
-    
-        data=gu_label_data,
-    
-        get_position=[
-            "longitude",
-            "latitude"
-        ],
-    
-        get_text="label",
-    
-        get_size=13,
-    
-        get_color=[
-            65,
-            65,
-            65,
-            170
-        ],
-    
-        get_text_anchor='"middle"',
-        get_alignment_baseline='"center"',
-    
-        size_units="pixels",
-        size_min_pixels=11,
-        size_max_pixels=15,
-    
-        # 핵심
-        character_set="auto",
-    
-        # 특정 한글 폰트를 강제로 지정하지 않음
-        # 브라우저가 한글 지원 폰트를 자동 선택
-        font_family="sans-serif",
-    
-        font_weight="bold",
-    
-        billboard=True,
-    
-        pickable=False
-    )
-
-    return (
-        gu_boundary_layer,
-        gu_text_layer
-    )
 # ============================================================
 # 14. 보증금 수준별 월세 통계
 # ============================================================
@@ -2367,14 +2226,6 @@ if run_search:
     if spatial_unit == "법정동별":
 
         dong = load_dong()
-        gu = load_gu()
-    
-        (
-            gu_boundary_layer,
-            gu_text_layer
-        ) = make_gu_background_layers(
-            gu
-        )
 
         df[
             "자치구코드"
@@ -2551,9 +2402,7 @@ if run_search:
         )
 
         layers = [
-            gu_boundary_layer,
-            dong_layer,
-            gu_text_layer
+            dong_layer
         ]
 
         if policy_layer is not None:
@@ -2678,17 +2527,6 @@ if run_search:
 
         grid = load_grid()
 
-
-        gu = load_gu()
-    
-        (
-            gu_boundary_layer,
-            gu_text_layer
-        ) = make_gu_background_layers(
-            gu
-        )
-
-        
         grid_df = df[
             df[
                 "grid_id"
@@ -2854,9 +2692,7 @@ if run_search:
         )
 
         layers = [
-            gu_boundary_layer,
-            grid_layer,
-            gu_text_layer
+            grid_layer
         ]
 
         if policy_layer is not None:
@@ -2945,16 +2781,6 @@ if run_search:
 
         gu = load_gu()
 
-         # ----------------------------------------------------
-        # 자치구 경계 + 자치구명
-        # ----------------------------------------------------
-    
-        (
-            gu_boundary_layer,
-            gu_text_layer
-        ) = make_gu_background_layers(
-            gu
-        )
 
         # ----------------------------------------------------
         # station_id 자료형 통일
@@ -3348,6 +3174,34 @@ if run_search:
             )
         )
 
+
+        # ----------------------------------------------------
+        # 서울 자치구 경계
+        # ----------------------------------------------------
+        
+        gu_layer = pdk.Layer(
+            "GeoJsonLayer",
+            data=gu,
+        
+            filled=False,
+            stroked=True,
+        
+            # 진한 회색, 적당한 투명도
+            get_line_color=[
+                65,
+                65,
+                65,
+                145
+            ],
+        
+            # 기존보다 조금 두껍게
+            line_width_min_pixels=1.2,
+            line_width_max_pixels=2.0,
+        
+            pickable=False
+        )
+
+
         # ----------------------------------------------------
         # 역 마커
         # ----------------------------------------------------
@@ -3381,14 +3235,11 @@ if run_search:
         # ----------------------------------------------------
 
         layers = [
-            gu_boundary_layer
+            gu_layer
         ]
 
 
-        # ----------------------------------------------------
-        # 500m 버퍼
-        # ----------------------------------------------------
-
+        # 500m 버퍼 자동 표시
         if (
             buffer_map is not None
             and not buffer_map.empty
@@ -3398,6 +3249,7 @@ if run_search:
                 "GeoJsonLayer",
                 data=buffer_map,
 
+                # geometry 자체가 LineString
                 filled=False,
                 stroked=True,
 
@@ -3419,34 +3271,20 @@ if run_search:
             )
 
 
-        # ----------------------------------------------------
-        # 자치구 이름
-        # 버퍼 존재 여부와 관계없이 항상 표시
-        # ----------------------------------------------------
-
-        layers.append(
-            gu_text_layer
-        )
-
-
-        # ----------------------------------------------------
-        # 역 마커
-        # ----------------------------------------------------
-
+        # 역 마커는 버퍼 위
         layers.append(
             station_layer
         )
 
 
-        # ----------------------------------------------------
-        # LH 청년매입임대
-        # ----------------------------------------------------
-
+        # LH는 가장 위
         if policy_layer is not None:
 
             layers.append(
                 policy_layer
             )
+
+
         deck = pdk.Deck(
             layers=layers,
             initial_view_state=SEOUL_VIEW,
