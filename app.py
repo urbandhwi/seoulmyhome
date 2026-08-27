@@ -1165,7 +1165,10 @@ def make_gu_label_data(gu):
 
 def make_gu_background_layers(gu):
 
-    # 자치구 경계
+    # --------------------------------------------------------
+    # 1. 자치구 경계
+    # --------------------------------------------------------
+
     gu_boundary_layer = pdk.Layer(
         "GeoJsonLayer",
         data=gu,
@@ -1174,36 +1177,37 @@ def make_gu_background_layers(gu):
         stroked=True,
 
         get_line_color=[
-            80,
-            80,
-            80,
-            65
+            70,
+            70,
+            70,
+            80
         ],
 
-        line_width_min_pixels=0.7,
-        line_width_max_pixels=1.2,
+        line_width_min_pixels=0.8,
+        line_width_max_pixels=1.3,
 
         pickable=False
     )
 
 
-    # 자치구 이름
+    # --------------------------------------------------------
+    # 2. 자치구 이름 표시 위치
+    # --------------------------------------------------------
+
     gu_label_data = (
         make_gu_label_data(
             gu
         )
     )
 
-    # 한글을 TextLayer 문자셋에 명시적으로 포함
-    korean_characters = sorted(
-        set(
-            "".join(
-                gu_label_data[
-                    "label"
-                ].astype(str)
-            )
-        )
-    )
+
+    # --------------------------------------------------------
+    # 3. 자치구 이름
+    #
+    # character_set="auto"
+    # → 실제 label에 포함된 한글 글자를 자동으로
+    #   font atlas에 포함
+    # --------------------------------------------------------
 
     gu_text_layer = pdk.Layer(
         "TextLayer",
@@ -1217,36 +1221,43 @@ def make_gu_background_layers(gu):
 
         get_text="label",
 
-        # 너무 강조되지 않게
-        get_size=11,
+        # 조금 크게 테스트
+        get_size=13,
 
+        # 회색 + 충분한 투명도
         get_color=[
-            80,
-            80,
-            80,
-            115
+            65,
+            65,
+            65,
+            180
         ],
 
         get_text_anchor='"middle"',
         get_alignment_baseline='"center"',
 
-        # 한글 표시를 위해 중요
-        character_set=korean_characters,
+        # 확대·축소해도 읽을 수 있도록
+        size_units="pixels",
+        size_min_pixels=11,
+        size_max_pixels=15,
 
-        font_family=(
-            "'Noto Sans KR', "
-            "'Malgun Gothic', "
-            "sans-serif"
-        ),
+        # 한글 문자 자동 인식
+        character_set="auto",
+
+        # 한국어 지원 폰트 우선
+        font_family="Malgun Gothic",
+
+        font_weight=600,
+
+        billboard=True,
 
         pickable=False
     )
+
 
     return (
         gu_boundary_layer,
         gu_text_layer
     )
-
 # ============================================================
 # 14. 보증금 수준별 월세 통계
 # ============================================================
